@@ -5,11 +5,11 @@ import { Request, Response } from "express";
 
 
 
-// Student Register 
+
 
 export const registerStudent = async (req : Request, res : Response) => {
   try {
-    const { fullName, email, password } = req.body;
+    const { fullName, email, password,grade} = req.body;
 
     const userExists = await User.findOne({ email });
     if (userExists) return res.status(400).json({ message: "User already exists" });
@@ -33,9 +33,17 @@ export const registerStudent = async (req : Request, res : Response) => {
 
 
 // Admin Creates Teacher
-export const createTeacher = async (req : Request, res : Response) => {
+
+export const createTeacher = async (req: Request, res: Response) => {
   try {
     const { fullName, email, password } = req.body;
+
+    // Regex to enforce domain
+    const teacherEmailRegex = /^[a-zA-Z0-9._%+-]+@teacher\.padhaihub\.edu\.np$/;
+
+    if (!teacherEmailRegex.test(email)) {
+      return res.status(400).json({ message: "Email must be from @teacher.padhaihub.edu.np domain" });
+    }
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -44,14 +52,15 @@ export const createTeacher = async (req : Request, res : Response) => {
       email,
       password: hashedPassword,
       role: "teacher",
-      isApproved: true 
+      isApproved: true
     });
 
     res.status(201).json({ message: "Teacher created successfully", teacher });
-  } catch (err:any) {
+  } catch (err: any) {
     res.status(500).json({ message: err.message });
   }
 };
+
 
 
 // Login (Admin / Student / Teacher)

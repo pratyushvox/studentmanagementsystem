@@ -1,11 +1,9 @@
 import { Mail, Lock, Eye, EyeOff, GraduationCap } from 'lucide-react';
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
-export default function Login() {
-  const navigate = useNavigate();
+export default function AdminLogin() {
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -33,10 +31,8 @@ export default function Login() {
       const data = await response.json();
 
       if (!response.ok) {
-        if (response.status === 403) {
-          toast.warning('Your account is pending admin approval. Please wait.');
-        } else if (response.status === 404) {
-          toast.error('User not found. Please check your email.');
+        if (response.status === 404) {
+          toast.error('Admin not found. Please check your email.');
         } else if (response.status === 401) {
           toast.error('Invalid credentials. Please try again.');
         } else {
@@ -46,22 +42,23 @@ export default function Login() {
         return;
       }
 
+      // Check if the logged-in user is actually an admin
+      if (data.role !== 'admin') {
+        toast.error('Access denied. This portal is for admins only.');
+        setIsLoading(false);
+        return;
+      }
+
       // Store token and user info
       localStorage.setItem('token', data.token);
       localStorage.setItem('role', data.role);
       localStorage.setItem('fullName', data.fullName);
 
-      toast.success('Login successful!');
+      toast.success('Admin login successful!');
 
-      // Navigate based on role
+      // Navigate to admin dashboard
       setTimeout(() => {
-        if (data.role === 'student') {
-          navigate('/AdminLogin');
-        } else if (data.role === 'teacher') {
-          navigate('/teacher-dashboard');
-        } else if (data.role === 'admin') {
-          navigate('/admin-dashboard');
-        }
+        window.location.href = '/admin-dashboard';
       }, 1000);
 
     } catch (error) {
@@ -87,7 +84,7 @@ export default function Login() {
             <span className="text-3xl font-bold">PadhaiHub</span>
           </div>
           <h2 className="text-3xl font-bold text-gray-900 mb-2">
-            Welcome Back
+            Admin Login
           </h2>
           <p className="text-gray-600">
             Sign in to access your account
@@ -98,7 +95,7 @@ export default function Login() {
         <div className="bg-white rounded-2xl shadow-xl p-8 space-y-6 ml-10 relative">
           <div className="absolute bottom-20 left-8 w-24 h-32 bg-pink-300 rounded-lg shadow-lg transform -rotate-12"></div>
         
-          <form onSubmit={handleSubmit} className="space-y-5 relative z-10">
+          <div className="space-y-5 relative z-10">
             {/* Email Input */}
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
@@ -114,7 +111,7 @@ export default function Login() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-700 focus:border-transparent"
-                  placeholder="you@gmail.com"
+                  placeholder="you@padhaihub.edu.np"
                   disabled={isLoading}
                 />
               </div>
@@ -134,6 +131,11 @@ export default function Login() {
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter') {
+                      handleSubmit(e);
+                    }
+                  }}
                   className="block w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-700 focus:border-transparent"
                   placeholder="Enter your password"
                   disabled={isLoading}
@@ -153,43 +155,16 @@ export default function Login() {
               </div>
             </div>
 
-            {/* Forgot Password */}
-            <div className="flex items-center justify-end">
-              <div className="text-sm">
-                <a href="#" className="font-medium text-teal-700 hover:text-teal-800">
-                  Forgot password?
-                </a>
-              </div>
-            </div>
-
             {/* Submit Button */}
             <button
-              type="submit"
+              onClick={handleSubmit}
               disabled={isLoading}
-              className="w-full py-3 px-4 bg-teal-700 text-white font-semibold rounded-lg hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-700 transition-colors shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full py-3 px-4 bg-teal-700 text-white font-semibold rounded-lg hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-700 transition-colors shadow-lg disabled:opacity-50 disabled:cursor-not-allowed mt-6"
             >
               {isLoading ? 'Signing In...' : 'Sign In'}
             </button>
-          </form>
-
-          {/* Divider */}
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-300"></div>
-            </div>
           </div>
         </div>
-
-        {/* Sign Up Link */}
-        <p className="text-center text-sm text-gray-600">
-          Don't have an account?{" "}
-          <button
-            onClick={() => navigate("/register")}
-            className="font-medium text-teal-700 hover:text-teal-800 cursor-pointer"
-          >
-            Create an account
-          </button>
-        </p>
       </div>
     </div>
   );

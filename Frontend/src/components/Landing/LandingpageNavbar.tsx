@@ -33,7 +33,7 @@ export default function Navbar() {
             </a>
           
                <button
-            onClick={() => navigate("/login")}
+           
             className="px-6 py-2 bg-[#034f47] text-white text-xl rounded-lg hover:bg-[#076d63] transition-colors shadow-md hover:shadow-lg cursorp "
           >
             Get Started 
