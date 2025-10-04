@@ -56,11 +56,9 @@ export default function Login() {
       // Navigate based on role
       setTimeout(() => {
         if (data.role === 'student') {
-          navigate('/AdminLogin');
+          navigate('/Student/dashboard');
         } else if (data.role === 'teacher') {
           navigate('/teacher-dashboard');
-        } else if (data.role === 'admin') {
-          navigate('/admin-dashboard');
         }
       }, 1000);
 
