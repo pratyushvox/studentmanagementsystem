@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
-import { Clock, Users, Video, Download, CheckCircle, PlayCircle, MessageSquare, Star, Filter, Search, BookOpen, FileText, Award, TrendingUp } from 'lucide-react';
+import { Clock, Users, Video, Download, CheckCircle, PlayCircle, Star, Filter, Search, BookOpen, FileText, Award, TrendingUp } from 'lucide-react';
 
 import Navbar from '../../components/Navbar';
 import Sidebar from '../../components/Sidebar';
-
 
 interface Course {
   id: number;
@@ -261,12 +260,10 @@ export default function StudentCoursesPage() {
                 className="bg-white border border-gray-200 rounded-lg overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
                 onClick={() => setSelectedCourse(course.id)}
               >
-                {/* Course Thumbnail */}
                 <div className={`h-40 ${course.thumbnail} flex items-center justify-center`}>
                   <PlayCircle className="w-16 h-16 text-white opacity-80" />
                 </div>
 
-                {/* Course Details */}
                 <div className="p-5">
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex-1">
@@ -281,7 +278,6 @@ export default function StudentCoursesPage() {
                     </div>
                   </div>
 
-                  {/* Course Info */}
                   <div className="flex items-center gap-4 mb-3 text-xs text-gray-600">
                     <div className="flex items-center gap-1">
                       <Video className="w-4 h-4" />
@@ -297,7 +293,6 @@ export default function StudentCoursesPage() {
                     </div>
                   </div>
 
-                  {/* Progress Bar */}
                   <div className="mb-3">
                     <div className="flex items-center justify-between text-sm mb-2">
                       <span className="text-gray-600">Progress</span>
@@ -314,14 +309,12 @@ export default function StudentCoursesPage() {
                     </p>
                   </div>
 
-                  {/* Next Class */}
                   {course.nextClass && (
                     <div className="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 text-xs text-blue-700">
                       <span className="font-medium">Next class:</span> {course.nextClass}
                     </div>
                   )}
 
-                  {/* Action Button */}
                   <button className="w-full mt-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white py-2 rounded-lg font-medium hover:shadow-lg transition-shadow">
                     Continue Learning
                   </button>

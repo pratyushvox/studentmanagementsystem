@@ -10,6 +10,7 @@ import Register from './pages/auth/Register';
 import AdminLogin from './pages/auth/AdminLogin';
 import StudentDashboardPage from "./pages/Student/Studentdashboard";
 import StudentCoursesPage from './pages/Student/Studentcourse';
+import StudentAssignmentsPage from './pages/Student/Studentassingment';
 
 function App() {
   return (
@@ -49,6 +50,14 @@ function App() {
           path="/student/courses" element={
              <ProtectedRoute role="student">
               <StudentCoursesPage />
+              </ProtectedRoute>
+          } 
+          />
+
+           <Route 
+          path="/student/Assignment" element={
+             <ProtectedRoute role="student">
+              <StudentAssignmentsPage />
               </ProtectedRoute>
           } 
           />
