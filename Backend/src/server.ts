@@ -3,6 +3,9 @@ import dotenv from "dotenv";
 import cors from "cors";
 import connectDB from "./config/db";
 import authRoutes from "./routes/authRoutes";
+import adminRoutes from "./routes/adminRoutes";
+import teacherRoutes from "./routes/teacherRoutes";
+import studentRoutes from "./routes/studentRoutes";
 
 dotenv.config();
 
@@ -24,6 +27,9 @@ connectDB();
 
 // Routes
 app.use("/api/auth", authRoutes); 
+app.use("/api/admin", adminRoutes);
+app.use("/api/teacher", teacherRoutes);
+app.use("/api/student", studentRoutes);
 
 // Test route
 app.get("/", (req, res) => {
