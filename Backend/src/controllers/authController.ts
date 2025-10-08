@@ -21,6 +21,7 @@ export const registerStudent = async (req : Request, res : Response) => {
       email,
       password: hashedPassword,
       role: "student",
+      grade,
       isApproved: false
     });
 

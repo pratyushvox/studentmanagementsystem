@@ -9,17 +9,19 @@ interface DecodedToken {
 
 export const protect = async (req: any, res: Response, next: NextFunction) => {
   let token;
+
   if (req.headers.authorization && req.headers.authorization.startsWith("Bearer")) {
     try {
       token = req.headers.authorization.split(" ")[1];
       const decoded = jwt.verify(token, process.env.JWT_SECRET!) as DecodedToken;
+
       req.user = await User.findById(decoded.id).select("-password");
 
       if (!req.user) {
         return res.status(401).json({ message: "User not found" });
       }
 
-      // If student and not approved yet → block
+      //  Block unapproved students
       if (req.user.role === "student" && !req.user.isApproved) {
         return res.status(403).json({ message: "Please wait for admin approval." });
       }
@@ -33,10 +35,21 @@ export const protect = async (req: any, res: Response, next: NextFunction) => {
   }
 };
 
+
 export const adminOnly = (req: any, res: Response, next: NextFunction) => {
   if (req.user && req.user.role === "admin") {
     next();
   } else {
     res.status(403).json({ message: "Admin only route" });
+  }
+};
+
+
+
+export const teacherOnly = (req: any, res: Response, next: NextFunction) => {
+  if (req.user && req.user.role === "teacher") {
+    next();
+  } else {
+    res.status(403).json({ message: "Teacher only route" });
   }
 };

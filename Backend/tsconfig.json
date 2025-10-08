@@ -13,6 +13,8 @@
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
 
+    
+
     // Source maps and declaration files
     "sourceMap": true,
     "declaration": true,
@@ -23,9 +25,12 @@
     "verbatimModuleSyntax": false,
     "moduleDetection": "force",
 
+    // Type definitions
+    "typeRoots": ["./node_modules/@types", "./types"],
+
     // JSX (not needed for backend, can remove if backend only)
     "jsx": "react-jsx"
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "types/**/*"],
   "exclude": ["node_modules", "dist"]
 }
