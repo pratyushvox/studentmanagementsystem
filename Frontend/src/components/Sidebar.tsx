@@ -14,9 +14,15 @@ import {
 
 interface SidebarProps {
   userRole?: "student" | "teacher" | "admin";
+  activeItem?: string;
+  onItemClick?: (itemId: string) => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ userRole = "student" }) => {
+const Sidebar: React.FC<SidebarProps> = ({ 
+  userRole = "student",
+  activeItem,
+  onItemClick 
+}) => {
   const [isOpen, setIsOpen] = useState(true);
   const navigate = useNavigate();
   const location = useLocation();
@@ -59,10 +65,24 @@ const Sidebar: React.FC<SidebarProps> = ({ userRole = "student" }) => {
       ? adminMenuItems
       : studentMenuItems;
 
-  const isActive = (path: string) => location.pathname === path;
+  // Check if item is active - use prop if provided, otherwise check location
+  const isActive = (itemId: string, path: string) => {
+    if (activeItem !== undefined) {
+      return activeItem === itemId;
+    }
+    return location.pathname === path;
+  };
 
-  const handleNavigation = (path: string) => {
+  const handleNavigation = (itemId: string, path: string) => {
+    // Call the callback if provided
+    if (onItemClick) {
+      onItemClick(itemId);
+    }
+    
+    // Navigate to the path
     navigate(path);
+    
+    // Close sidebar on mobile
     if (window.innerWidth < 1024) {
       setIsOpen(false);
     }
@@ -89,9 +109,9 @@ const Sidebar: React.FC<SidebarProps> = ({ userRole = "student" }) => {
               return (
                 <button
                   key={item.id}
-                  onClick={() => handleNavigation(item.path)}
+                  onClick={() => handleNavigation(item.id, item.path)}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
-                    isActive(item.path)
+                    isActive(item.id, item.path)
                       ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md"
                       : "text-gray-700 hover:bg-gray-100"
                   }`}

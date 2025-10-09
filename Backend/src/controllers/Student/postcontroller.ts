@@ -1,78 +1,47 @@
-// controllers/dashboardController.ts
+// controllers/postController.ts
 import { Request, Response } from "express";
-import Assignment from "../../models/Assignment";
-import Submission from "../../models/Submission";
 import Post from "../../models/Post";
 import User from "../../models/User";
 
-//  Get student dashboard summary
-export const getStudentDashboard = async (req: Request, res: Response) => {
+// ✅ Get all posts (for student's grade/subjects)
+export const getPostsForStudent = async (req: Request, res: Response) => {
   try {
-    
-    if (!req.user) {
+     if (!req.user) {
       return res.status(401).json({ message: "User not authenticated" });
     }
-
-    const student = await User.findById(req.user._id); 
+    const student = await User.findById(req.user.id);
     if (!student) return res.status(404).json({ message: "Student not found" });
 
-    // Fix 2: Proper check for assignedSubjects
-    const subjectFilter = student.assignedSubjects && student.assignedSubjects.length > 0
-      ? { $in: student.assignedSubjects }
-      : { $exists: true };
+    const { contentType, subject } = req.query;
+    const query: any = { grade: student.grade };
 
-    const pendingAssignments = await Assignment.countDocuments({
-      grade: student.grade,
-      subject: subjectFilter,
-      deadline: { $gte: new Date() },
-    });
+    if (student.assignedSubjects?.length > 0) {
+      query.subject = { $in: student.assignedSubjects };
+    }
 
-    const submittedIds = await Submission.find({ studentId: req.user._id }).distinct("assignmentId");
+    if (contentType) query.contentType = contentType;
+    if (subject) query.subject = subject;
 
-    const notSubmittedCount = await Assignment.countDocuments({
-      _id: { $nin: submittedIds },
-      grade: student.grade,
-      deadline: { $gte: new Date() },
-    });
+    const posts = await Post.find(query)
+      .populate("teacherId", "fullName email")
+      .sort({ createdAt: -1 });
 
-    const submissions = await Submission.find({ studentId: req.user._id });
-    
-    // Fix 3: Proper type checking for grade
-    const gradedSubmissions = submissions.filter((s) => s.grade !== undefined && s.grade !== null);
-    const averageGrade =
-      gradedSubmissions.length > 0
-        ? gradedSubmissions.reduce((sum, s) => sum + (s.grade ?? 0), 0) / gradedSubmissions.length
-        : 0;
+    res.json({ message: "Posts fetched successfully", count: posts.length, posts });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+};
 
-    const recentPosts = await Post.countDocuments({
-      grade: student.grade,
-      createdAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
-    });
+// ✅ Get single post by ID
+export const getPostById = async (req: Request, res: Response) => {
+  try {
+    const { postId } = req.params;
+    const post = await Post.findById(postId)
+      .populate("teacherId", "fullName email grade subject");
 
-    res.json({
-      message: "Dashboard data fetched successfully",
-      dashboard: {
-        student: {
-          name: student.fullName,
-          grade: student.grade,
-          subjects: student.assignedSubjects,
-        },
-        assignments: {
-          pending: notSubmittedCount,
-          total: pendingAssignments,
-          submitted: submissions.length,
-        },
-        performance: {
-          totalSubmissions: submissions.length,
-          gradedSubmissions: gradedSubmissions.length,
-          ungradedSubmissions: submissions.length - gradedSubmissions.length,
-          averageGrade: Math.round(averageGrade * 100) / 100,
-        },
-        recentActivity: {
-          newPostsThisWeek: recentPosts,
-        },
-      },
-    });
+    if (!post) return res.status(404).json({ message: "Post not found" });
+
+    res.json({ message: "Post details fetched", post });
   } catch (err: any) {
     res.status(500).json({ message: err.message });
   }

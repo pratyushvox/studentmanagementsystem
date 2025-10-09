@@ -5,12 +5,19 @@ import { ToastContainer, Bounce } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import ProtectedRoute from './components/routes/ProtectedRoute';
 import Landingpage from './pages/Landingpage';
+//auth
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
 import AdminLogin from './pages/auth/AdminLogin';
+
+//student
 import StudentDashboardPage from "./pages/Student/Studentdashboard";
 import StudentCoursesPage from './pages/Student/Studentcourse';
 import StudentAssignmentsPage from './pages/Student/Studentassingment';
+
+//admin
+import AdminDashboardPage from './pages/Admin/Admindashboard';
+import AdminStudents from './pages/Admin/Student';
 
 function App() {
   return (
@@ -60,6 +67,25 @@ function App() {
               <StudentAssignmentsPage />
               </ProtectedRoute>
           } 
+          />
+
+
+          <Route
+            path="/admin/dashboard"
+            element={
+              <ProtectedRoute role="admin">
+                <AdminDashboardPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/admin/students"
+            element={
+              <ProtectedRoute role="admin">
+                <AdminStudents />
+              </ProtectedRoute>
+            }
           />
 
         </Routes>

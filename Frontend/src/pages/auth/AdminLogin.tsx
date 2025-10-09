@@ -58,7 +58,7 @@ export default function AdminLogin() {
 
       // Navigate to admin dashboard
       setTimeout(() => {
-        window.location.href = '/admin-dashboard';
+        window.location.href = '/admin/dashboard';
       }, 1000);
 
     } catch (error) {
