@@ -1,240 +1,279 @@
-import React, { useState } from 'react';
-import { Clock, Users, Video, Download, CheckCircle, PlayCircle, Star, Filter, Search, BookOpen, FileText, Award, TrendingUp } from 'lucide-react';
-
+import { useState, useEffect } from 'react';
+import { Clock, Users, Video, Download, CheckCircle, PlayCircle, Star, Filter, Search, BookOpen, FileText, Award, TrendingUp, AlertCircle } from 'lucide-react';
 import Navbar from '../../components/Navbar';
 import Sidebar from '../../components/Sidebar';
+import { LoadingSpinner, ErrorDisplay, EmptyState } from '../../components/LoadingError';
 
-interface Course {
-  id: number;
+const API_BASE_URL = "http://localhost:5000/api";
+
+interface Post {
+  _id: string;
+  teacherId: {
+    _id: string;
+    fullName: string;
+    email: string;
+  };
   title: string;
-  instructor: string;
-  progress: number;
-  totalLectures: number;
-  completedLectures: number;
-  students: number;
-  rating: number;
-  thumbnail: string;
-  category: string;
-  duration: string;
-  nextClass?: string;
+  contentType: "video" | "pdf";
+  fileUrl: string;
+  grade: string;
+  subject: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
-interface Material {
-  id: number;
-  title: string;
-  type: 'pdf' | 'video' | 'doc';
-  size: string;
-  uploadDate: string;
+interface GroupedCourse {
+  subject: string;
+  posts: Post[];
+  videos: number;
+  pdfs: number;
+  instructor: string;
 }
 
 export default function StudentCoursesPage() {
   const [activeItem, setActiveItem] = useState('courses');
-  const [selectedCourse, setSelectedCourse] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [posts, setPosts] = useState<Post[]>([]);
   const [filterCategory, setFilterCategory] = useState('all');
+  const [filterType, setFilterType] = useState<'all' | 'video' | 'pdf'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
 
-  const handleLogout = () => {
-    alert('Logging out...');
-  };
+  useEffect(() => {
+    fetchPosts();
+  }, [filterType]);
 
-  const handleProfileClick = () => {
-    alert('Edit Profile clicked');
-  };
+  const fetchPosts = async () => {
+    try {
+      setLoading(true);
+      const token = localStorage.getItem("token");
+      
+      let url = `${API_BASE_URL}/student/posts`;
+      const params = new URLSearchParams();
+      
+      if (filterType !== 'all') {
+        params.append('contentType', filterType);
+      }
+      
+      if (params.toString()) {
+        url += `?${params.toString()}`;
+      }
 
-  const courses: Course[] = [
-    {
-      id: 1,
-      title: 'Advanced Calculus',
-      instructor: 'Dr. Sarah Johnson',
-      progress: 85,
-      totalLectures: 24,
-      completedLectures: 20,
-      students: 45,
-      rating: 4.8,
-      thumbnail: 'bg-gradient-to-br from-blue-500 to-blue-600',
-      category: 'Mathematics',
-      duration: '12 weeks',
-      nextClass: 'Today at 2:00 PM'
-    },
-    {
-      id: 2,
-      title: 'Quantum Physics',
-      instructor: 'Prof. Michael Chen',
-      progress: 72,
-      totalLectures: 30,
-      completedLectures: 22,
-      students: 38,
-      rating: 4.9,
-      thumbnail: 'bg-gradient-to-br from-purple-500 to-purple-600',
-      category: 'Physics',
-      duration: '14 weeks',
-      nextClass: 'Tomorrow at 10:00 AM'
-    },
-    {
-      id: 3,
-      title: 'Literature 101',
-      instructor: 'Dr. Emily Brown',
-      progress: 90,
-      totalLectures: 20,
-      completedLectures: 18,
-      students: 52,
-      rating: 4.7,
-      thumbnail: 'bg-gradient-to-br from-green-500 to-green-600',
-      category: 'Literature',
-      duration: '10 weeks',
-      nextClass: 'Monday at 3:00 PM'
-    },
-    {
-      id: 4,
-      title: 'Organic Chemistry',
-      instructor: 'Prof. David Lee',
-      progress: 68,
-      totalLectures: 28,
-      completedLectures: 19,
-      students: 41,
-      rating: 4.6,
-      thumbnail: 'bg-gradient-to-br from-orange-500 to-orange-600',
-      category: 'Chemistry',
-      duration: '13 weeks'
-    },
-    {
-      id: 5,
-      title: 'Data Structures',
-      instructor: 'Dr. Alex Kumar',
-      progress: 55,
-      totalLectures: 32,
-      completedLectures: 18,
-      students: 67,
-      rating: 4.9,
-      thumbnail: 'bg-gradient-to-br from-red-500 to-red-600',
-      category: 'Computer Science',
-      duration: '15 weeks',
-      nextClass: 'Wednesday at 11:00 AM'
-    },
-    {
-      id: 6,
-      title: 'World History',
-      instructor: 'Prof. Maria Garcia',
-      progress: 78,
-      totalLectures: 18,
-      completedLectures: 14,
-      students: 35,
-      rating: 4.5,
-      thumbnail: 'bg-gradient-to-br from-teal-500 to-teal-600',
-      category: 'History',
-      duration: '9 weeks'
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to fetch posts');
+      }
+
+      setPosts(data.posts || []);
+      setError(null);
+    } catch (err: any) {
+      setError(err.message);
+      console.error("Error fetching posts:", err);
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
 
-  const courseMaterials: Material[] = [
-    { id: 1, title: 'Lecture Notes - Chapter 5', type: 'pdf', size: '2.4 MB', uploadDate: '2 days ago' },
-    { id: 2, title: 'Video Tutorial - Integration', type: 'video', size: '145 MB', uploadDate: '5 days ago' },
-    { id: 3, title: 'Assignment Guidelines', type: 'doc', size: '1.2 MB', uploadDate: '1 week ago' },
-    { id: 4, title: 'Practice Problems Set', type: 'pdf', size: '890 KB', uploadDate: '1 week ago' }
-  ];
+  const groupPostsBySubject = (): GroupedCourse[] => {
+    const grouped = posts.reduce((acc, post) => {
+      if (!acc[post.subject]) {
+        acc[post.subject] = {
+          subject: post.subject,
+          posts: [],
+          videos: 0,
+          pdfs: 0,
+          instructor: post.teacherId.fullName,
+        };
+      }
+      
+      acc[post.subject].posts.push(post);
+      if (post.contentType === 'video') {
+        acc[post.subject].videos++;
+      } else {
+        acc[post.subject].pdfs++;
+      }
+      
+      return acc;
+    }, {} as Record<string, GroupedCourse>);
 
-  const categories = ['all', 'Mathematics', 'Physics', 'Literature', 'Chemistry', 'Computer Science', 'History'];
+    return Object.values(grouped);
+  };
 
-  const filteredCourses = courses.filter(course => {
-    const matchesCategory = filterCategory === 'all' || course.category === filterCategory;
-    const matchesSearch = course.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+  const getUniqueSubjects = (): string[] => {
+    const subjects = [...new Set(posts.map(post => post.subject))];
+    return ['all', ...subjects];
+  };
+
+  const filteredPosts = posts.filter(post => {
+    const matchesCategory = filterCategory === 'all' || post.subject === filterCategory;
+    const matchesSearch = post.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          post.teacherId.fullName.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesCategory && matchesSearch;
+  });
+
+  const groupedCourses = groupPostsBySubject().filter(course => {
+    const matchesCategory = filterCategory === 'all' || course.subject === filterCategory;
+    const matchesSearch = course.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           course.instructor.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
   });
 
+  const formatTimeAgo = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffTime = now.getTime() - date.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    const diffHours = Math.floor(diffTime / (1000 * 60 * 60));
+
+    if (diffHours < 1) return "Just now";
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays === 1) return "1 day ago";
+    if (diffDays < 7) return `${diffDays} days ago`;
+    if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+    return `${Math.floor(diffDays / 30)} months ago`;
+  };
+
+  const getColorForSubject = (subject: string): string => {
+    const colors = [
+      'from-blue-500 to-blue-600',
+      'from-purple-500 to-purple-600',
+      'from-green-500 to-green-600',
+      'from-orange-500 to-orange-600',
+      'from-red-500 to-red-600',
+      'from-teal-500 to-teal-600',
+      'from-pink-500 to-pink-600',
+      'from-indigo-500 to-indigo-600',
+    ];
+    const index = subject.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    return colors[index % colors.length];
+  };
+
+  const handleDownload = async (post: Post) => {
+    try {
+      const link = document.createElement('a');
+      link.href = post.fileUrl;
+      link.download = post.title;
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error('Error downloading file:', err);
+      alert('Failed to download file');
+    }
+  };
+
+  const handleViewPost = (post: Post) => {
+    setSelectedPost(post);
+    window.open(post.fileUrl, '_blank');
+  };
+
+  if (loading) {
+    return <LoadingSpinner message="Loading courses..." />;
+  }
+
+  if (error) {
+    return <ErrorDisplay error={error} onRetry={fetchPosts} title="Error Loading Courses" />;
+  }
+
+  const totalVideos = posts.filter(p => p.contentType === 'video').length;
+  const totalPdfs = posts.filter(p => p.contentType === 'pdf').length;
+  const totalSubjects = new Set(posts.map(p => p.subject)).size;
+
   return (
     <div className="min-h-screen bg-gray-50">
-      <Navbar onProfileClick={handleProfileClick} onLogout={handleLogout} />
+      <Navbar onProfileClick={() => {}} />
       <Sidebar activeItem={activeItem} onItemClick={setActiveItem} userRole="student" />
 
-      <main className="lg:ml-64 pt-16">
-        <div className="p-6 lg:p-8 space-y-6">
-          {/* Header */}
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div>
-              <h1 className="text-2xl font-semibold text-gray-900">My Courses</h1>
-              <p className="text-gray-600 text-sm mt-1">
-                Track your learning progress and access course materials
-              </p>
-            </div>
-            <div className="flex items-center gap-2 text-sm text-gray-500">
-              <Clock className="w-4 h-4" />
-              <span>{courses.length} Active Courses</span>
-            </div>
+      <main className="lg:ml-64 p-6 lg:p-8 space-y-6 mt-10">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900">My Courses</h1>
+            <p className="text-gray-600 text-sm mt-1">
+              Access your course materials and learning resources
+            </p>
           </div>
+          <div className="flex items-center gap-2 text-sm text-gray-500">
+            <Clock className="w-4 h-4" />
+            <span>{totalSubjects} Active Subjects</span>
+          </div>
+        </div>
 
-          {/* Stats Overview */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white border border-gray-200 rounded-lg p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600 font-medium">Total Courses</p>
-                  <p className="text-2xl font-semibold text-gray-900 mt-2">{courses.length}</p>
-                  <p className="text-xs text-gray-500 mt-1">This semester</p>
-                </div>
-                <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center">
-                  <BookOpen className="w-5 h-5 text-blue-600" />
-                </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-white border border-gray-200 rounded-lg p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600 font-medium">Total Subjects</p>
+                <p className="text-2xl font-semibold text-gray-900 mt-2">{totalSubjects}</p>
+                <p className="text-xs text-gray-500 mt-1">This semester</p>
               </div>
-            </div>
-
-            <div className="bg-white border border-gray-200 rounded-lg p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600 font-medium">Completed</p>
-                  <p className="text-2xl font-semibold text-gray-900 mt-2">
-                    {courses.reduce((acc, c) => acc + c.completedLectures, 0)}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">Total lectures</p>
-                </div>
-                <div className="w-10 h-10 bg-green-50 rounded-lg flex items-center justify-center">
-                  <CheckCircle className="w-5 h-5 text-green-600" />
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white border border-gray-200 rounded-lg p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600 font-medium">Avg Progress</p>
-                  <p className="text-2xl font-semibold text-gray-900 mt-2">
-                    {Math.round(courses.reduce((acc, c) => acc + c.progress, 0) / courses.length)}%
-                  </p>
-                  <p className="text-xs text-green-600 mt-1">+12% this month</p>
-                </div>
-                <div className="w-10 h-10 bg-purple-50 rounded-lg flex items-center justify-center">
-                  <TrendingUp className="w-5 h-5 text-purple-600" />
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white border border-gray-200 rounded-lg p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600 font-medium">Certificates</p>
-                  <p className="text-2xl font-semibold text-gray-900 mt-2">3</p>
-                  <p className="text-xs text-gray-500 mt-1">Earned this year</p>
-                </div>
-                <div className="w-10 h-10 bg-amber-50 rounded-lg flex items-center justify-center">
-                  <Award className="w-5 h-5 text-amber-600" />
-                </div>
+              <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center">
+                <BookOpen className="w-5 h-5 text-blue-600" />
               </div>
             </div>
           </div>
 
-          {/* Filters and Search */}
-          <div className="bg-white border border-gray-200 rounded-lg p-4">
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="flex-1 relative">
-                <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search courses..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+          <div className="bg-white border border-gray-200 rounded-lg p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600 font-medium">Video Lectures</p>
+                <p className="text-2xl font-semibold text-gray-900 mt-2">{totalVideos}</p>
+                <p className="text-xs text-gray-500 mt-1">Available</p>
               </div>
+              <div className="w-10 h-10 bg-green-50 rounded-lg flex items-center justify-center">
+                <Video className="w-5 h-5 text-green-600" />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-lg p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600 font-medium">Study Materials</p>
+                <p className="text-2xl font-semibold text-gray-900 mt-2">{totalPdfs}</p>
+                <p className="text-xs text-gray-500 mt-1">PDFs available</p>
+              </div>
+              <div className="w-10 h-10 bg-purple-50 rounded-lg flex items-center justify-center">
+                <FileText className="w-5 h-5 text-purple-600" />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-lg p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600 font-medium">Total Materials</p>
+                <p className="text-2xl font-semibold text-gray-900 mt-2">{posts.length}</p>
+                <p className="text-xs text-gray-500 mt-1">Resources</p>
+              </div>
+              <div className="w-10 h-10 bg-amber-50 rounded-lg flex items-center justify-center">
+                <Award className="w-5 h-5 text-amber-600" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white border border-gray-200 rounded-lg p-4">
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex-1 relative">
+              <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search courses or instructors..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div className="flex gap-2">
               <div className="flex items-center gap-2">
                 <Filter className="w-5 h-5 text-gray-400" />
                 <select
@@ -242,126 +281,152 @@ export default function StudentCoursesPage() {
                   onChange={(e) => setFilterCategory(e.target.value)}
                   className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  {categories.map(cat => (
-                    <option key={cat} value={cat}>
-                      {cat === 'all' ? 'All Categories' : cat}
+                  {getUniqueSubjects().map(subject => (
+                    <option key={subject} value={subject}>
+                      {subject === 'all' ? 'All Subjects' : subject}
                     </option>
                   ))}
                 </select>
               </div>
-            </div>
-          </div>
-
-          {/* Courses Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredCourses.map((course) => (
-              <div
-                key={course.id}
-                className="bg-white border border-gray-200 rounded-lg overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
-                onClick={() => setSelectedCourse(course.id)}
+              <select
+                value={filterType}
+                onChange={(e) => setFilterType(e.target.value as 'all' | 'video' | 'pdf')}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <div className={`h-40 ${course.thumbnail} flex items-center justify-center`}>
-                  <PlayCircle className="w-16 h-16 text-white opacity-80" />
-                </div>
-
-                <div className="p-5">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-gray-900 text-base mb-1">
-                        {course.title}
-                      </h3>
-                      <p className="text-sm text-gray-600">{course.instructor}</p>
-                    </div>
-                    <div className="flex items-center gap-1 text-sm">
-                      <Star className="w-4 h-4 text-yellow-500 fill-current" />
-                      <span className="font-semibold text-gray-900">{course.rating}</span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-4 mb-3 text-xs text-gray-600">
-                    <div className="flex items-center gap-1">
-                      <Video className="w-4 h-4" />
-                      <span>{course.totalLectures} lectures</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Users className="w-4 h-4" />
-                      <span>{course.students}</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Clock className="w-4 h-4" />
-                      <span>{course.duration}</span>
-                    </div>
-                  </div>
-
-                  <div className="mb-3">
-                    <div className="flex items-center justify-between text-sm mb-2">
-                      <span className="text-gray-600">Progress</span>
-                      <span className="font-semibold text-gray-900">{course.progress}%</span>
-                    </div>
-                    <div className="w-full bg-gray-100 rounded-full h-2">
-                      <div
-                        className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all"
-                        style={{ width: `${course.progress}%` }}
-                      ></div>
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {course.completedLectures} of {course.totalLectures} completed
-                    </p>
-                  </div>
-
-                  {course.nextClass && (
-                    <div className="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 text-xs text-blue-700">
-                      <span className="font-medium">Next class:</span> {course.nextClass}
-                    </div>
-                  )}
-
-                  <button className="w-full mt-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white py-2 rounded-lg font-medium hover:shadow-lg transition-shadow">
-                    Continue Learning
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Course Materials Section */}
-          <div className="bg-white border border-gray-200 rounded-lg">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900">Recent Course Materials</h2>
-            </div>
-            <div className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {courseMaterials.map((material) => (
-                  <div
-                    key={material.id}
-                    className="flex items-center gap-4 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-                  >
-                    <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${
-                      material.type === 'pdf' ? 'bg-red-50' :
-                      material.type === 'video' ? 'bg-blue-50' : 'bg-green-50'
-                    }`}>
-                      {material.type === 'pdf' ? (
-                        <FileText className={`w-6 h-6 ${material.type === 'pdf' ? 'text-red-600' : ''}`} />
-                      ) : material.type === 'video' ? (
-                        <Video className="w-6 h-6 text-blue-600" />
-                      ) : (
-                        <FileText className="w-6 h-6 text-green-600" />
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-medium text-gray-900 text-sm">{material.title}</h3>
-                      <p className="text-xs text-gray-600 mt-1">
-                        {material.size} • {material.uploadDate}
-                      </p>
-                    </div>
-                    <button className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
-                      <Download className="w-5 h-5" />
-                    </button>
-                  </div>
-                ))}
-              </div>
+                <option value="all">All Types</option>
+                <option value="video">Videos Only</option>
+                <option value="pdf">PDFs Only</option>
+              </select>
             </div>
           </div>
         </div>
+
+        {posts.length === 0 ? (
+          <EmptyState 
+            icon={BookOpen} 
+            message="No course materials yet"
+            description="Your teachers will upload course materials here"
+          />
+        ) : (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {groupedCourses.map((course) => (
+                <div
+                  key={course.subject}
+                  className="bg-white border border-gray-200 rounded-lg overflow-hidden hover:shadow-lg transition-shadow"
+                >
+                  <div className={`h-40 bg-gradient-to-br ${getColorForSubject(course.subject)} flex items-center justify-center`}>
+                    <BookOpen className="w-16 h-16 text-white opacity-80" />
+                  </div>
+
+                  <div className="p-5">
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-gray-900 text-base mb-1">
+                          {course.subject}
+                        </h3>
+                        <p className="text-sm text-gray-600">{course.instructor}</p>
+                      </div>
+                      <div className="flex items-center gap-1 text-sm">
+                        <Star className="w-4 h-4 text-yellow-500 fill-current" />
+                        <span className="font-semibold text-gray-900">4.8</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-4 mb-4 text-xs text-gray-600">
+                      <div className="flex items-center gap-1">
+                        <Video className="w-4 h-4" />
+                        <span>{course.videos} videos</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <FileText className="w-4 h-4" />
+                        <span>{course.pdfs} PDFs</span>
+                      </div>
+                    </div>
+
+                    <div className="text-xs text-gray-500 mb-4">
+                      {course.posts.length} total materials
+                    </div>
+
+                    <button 
+                      onClick={() => {
+                        setFilterCategory(course.subject);
+                        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+                      }}
+                      className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-2 rounded-lg font-medium hover:shadow-lg transition-shadow"
+                    >
+                      View Materials
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="bg-white border border-gray-200 rounded-lg">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <h2 className="text-lg font-semibold text-gray-900">All Course Materials</h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  {filteredPosts.length} materials found
+                </p>
+              </div>
+              <div className="p-6">
+                {filteredPosts.length === 0 ? (
+                  <EmptyState 
+                    icon={Search} 
+                    message="No materials found"
+                    description="Try adjusting your filters or search query"
+                  />
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {filteredPosts.map((post) => (
+                      <div
+                        key={post._id}
+                        className="flex items-center gap-4 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
+                      >
+                        <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${
+                          post.contentType === 'video' ? 'bg-blue-50' : 'bg-red-50'
+                        }`}>
+                          {post.contentType === 'video' ? (
+                            <Video className="w-6 h-6 text-blue-600" />
+                          ) : (
+                            <FileText className="w-6 h-6 text-red-600" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-medium text-gray-900 text-sm truncate">
+                            {post.title}
+                          </h3>
+                          <p className="text-xs text-gray-600 mt-1">
+                            {post.subject} • {post.teacherId.fullName}
+                          </p>
+                          <p className="text-xs text-gray-500 mt-1">
+                            {formatTimeAgo(post.createdAt)}
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          <button 
+                            onClick={() => handleViewPost(post)}
+                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            title="View"
+                          >
+                            <PlayCircle className="w-5 h-5" />
+                          </button>
+                          <button 
+                            onClick={() => handleDownload(post)}
+                            className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                            title="Download"
+                          >
+                            <Download className="w-5 h-5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
+        )}
       </main>
     </div>
   );
