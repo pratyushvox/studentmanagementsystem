@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react';
 import { Calendar, Clock, FileText, CheckCircle, AlertCircle, Search, Download, Upload } from 'lucide-react';
 import Navbar from '../../components/Navbar';
 import Sidebar from '../../components/Sidebar';
+import StatsCard from '../../components/Cardstats';
 import SubmitAssignmentModal from '../../components/Submitassigmentmodal';
-import { LoadingSpinner, ErrorDisplay, EmptyState } from '../../components/LoadingError';
+import { LoadingSpinner, ErrorDisplay, EmptyState } from '../../components/Loadingerror';
 
 const API_BASE_URL = "http://localhost:5000/api";
 
@@ -232,28 +233,47 @@ export default function StudentAssignmentsPage() {
           </div>
         </div>
 
-        {/* Stats */}
+        {/* Stats Cards using StatsCard Component */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-          <div className="bg-white border border-gray-200 rounded-lg p-4 text-center">
-            <p className="text-2xl font-semibold text-gray-900">{assignments.length}</p>
-            <p className="text-xs text-gray-600 mt-1">Total</p>
-          </div>
-          <div className="bg-white border border-gray-200 rounded-lg p-4 text-center">
-            <p className="text-2xl font-semibold text-blue-600">{upcomingCount}</p>
-            <p className="text-xs text-gray-600 mt-1">Upcoming</p>
-          </div>
-          <div className="bg-white border border-gray-200 rounded-lg p-4 text-center">
-            <p className="text-2xl font-semibold text-orange-600">{pendingCount}</p>
-            <p className="text-xs text-gray-600 mt-1">Pending</p>
-          </div>
-          <div className="bg-white border border-gray-200 rounded-lg p-4 text-center">
-            <p className="text-2xl font-semibold text-purple-600">{submittedCount}</p>
-            <p className="text-xs text-gray-600 mt-1">Submitted</p>
-          </div>
-          <div className="bg-white border border-gray-200 rounded-lg p-4 text-center">
-            <p className="text-2xl font-semibold text-green-600">{gradedCount}</p>
-            <p className="text-xs text-gray-600 mt-1">Graded</p>
-          </div>
+          <StatsCard
+            title="Total"
+            count={assignments.length}
+            subtitle="assignments"
+            iconColor="text-gray-600"
+            iconBg="bg-gray-50"
+          />
+
+          <StatsCard
+            title="Upcoming"
+            count={upcomingCount}
+            subtitle="assignments"
+            iconColor="text-blue-600"
+            iconBg="bg-blue-50"
+          />
+
+          <StatsCard
+            title="Pending"
+            count={pendingCount}
+            subtitle="assignments"
+            iconColor="text-orange-600"
+            iconBg="bg-orange-50"
+          />
+
+          <StatsCard
+            title="Submitted"
+            count={submittedCount}
+            subtitle="assignments"
+            iconColor="text-purple-600"
+            iconBg="bg-purple-50"
+          />
+
+          <StatsCard
+            title="Graded"
+            count={gradedCount}
+            subtitle="assignments"
+            iconColor="text-green-600"
+            iconBg="bg-green-50"
+          />
         </div>
 
         {/* Filters and Search */}

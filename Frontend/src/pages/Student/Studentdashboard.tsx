@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { Clock, Calendar, FileText, TrendingUp, Award, BarChart3, BookOpen, Users, Target, AlertCircle, CheckCircle } from "lucide-react";
 import Navbar from "../../components/Navbar";
 import Sidebar from "../../components/Sidebar";
-import { LoadingSpinner, ErrorDisplay, EmptyState } from "../../components/LoadingError";
+import StatsCard from "../../components/Cardstats";
+import { LoadingSpinner, ErrorDisplay, EmptyState } from "../../components/Loadingerror";
 
 // API Base URL - Matches your backend configuration
 const API_BASE_URL = "http://localhost:5000/api";
@@ -135,74 +136,45 @@ export default function StudentDashboardPage() {
           </div>
         </div>
 
+        {/* Stats Cards using StatsCard Component */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white border border-gray-200 rounded-lg p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 font-medium">Pending Tasks</p>
-                <p className="text-2xl font-semibold text-gray-900 mt-2">
-                  {dashboardData.assignments.pending}
-                </p>
-                <p className="text-xs text-orange-600 mt-1">
-                  {dashboardData.assignments.total} total assignments
-                </p>
-              </div>
-              <div className="w-10 h-10 bg-orange-50 rounded-lg flex items-center justify-center">
-                <FileText className="w-5 h-5 text-orange-600" />
-              </div>
-            </div>
-          </div>
+          <StatsCard
+            title="Pending Tasks"
+            count={dashboardData.assignments.pending}
+            subtitle="total assignments"
+            icon={FileText}
+            iconColor="text-orange-600"
+            iconBg="bg-orange-50"
+          />
 
-          <div className="bg-white border border-gray-200 rounded-lg p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 font-medium">Submissions</p>
-                <p className="text-2xl font-semibold text-gray-900 mt-2">
-                  {dashboardData.assignments.submitted}
-                </p>
-                <p className="text-xs text-green-600 mt-1">
-                  {dashboardData.performance.gradedSubmissions} graded
-                </p>
-              </div>
-              <div className="w-10 h-10 bg-green-50 rounded-lg flex items-center justify-center">
-                <CheckCircle className="w-5 h-5 text-green-600" />
-              </div>
-            </div>
-          </div>
+          <StatsCard
+            title="Submissions"
+            count={dashboardData.assignments.submitted}
+            subtitle="graded"
+            icon={CheckCircle}
+            iconColor="text-green-600"
+            iconBg="bg-green-50"
+          />
 
-          <div className="bg-white border border-gray-200 rounded-lg p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 font-medium">Average Grade</p>
-                <p className="text-2xl font-semibold text-gray-900 mt-2">
-                  {dashboardData.performance.averageGrade > 0 
-                    ? `${dashboardData.performance.averageGrade}%` 
-                    : "N/A"}
-                </p>
-                <p className="text-xs text-gray-500 mt-1">
-                  {dashboardData.performance.ungradedSubmissions} pending grades
-                </p>
-              </div>
-              <div className="w-10 h-10 bg-emerald-50 rounded-lg flex items-center justify-center">
-                <TrendingUp className="w-5 h-5 text-emerald-600" />
-              </div>
-            </div>
-          </div>
+          <StatsCard
+            title="Average Grade"
+            count={dashboardData.performance.averageGrade > 0 
+              ? dashboardData.performance.averageGrade 
+              : 0}
+            subtitle="pending grades"
+            icon={TrendingUp}
+            iconColor="text-emerald-600"
+            iconBg="bg-emerald-50"
+          />
 
-          <div className="bg-white border border-gray-200 rounded-lg p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 font-medium">Recent Activity</p>
-                <p className="text-2xl font-semibold text-gray-900 mt-2">
-                  {dashboardData.recentActivity.newPostsThisWeek}
-                </p>
-                <p className="text-xs text-gray-500 mt-1">New posts this week</p>
-              </div>
-              <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center">
-                <BookOpen className="w-5 h-5 text-blue-600" />
-              </div>
-            </div>
-          </div>
+          <StatsCard
+            title="Recent Activity"
+            count={dashboardData.recentActivity.newPostsThisWeek}
+            subtitle="New posts this week"
+            icon={BookOpen}
+            iconColor="text-blue-600"
+            iconBg="bg-blue-50"
+          />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

@@ -1,69 +1,41 @@
-
 import React from 'react';
+import type { LucideIcon } from 'lucide-react';
 
-interface SubjectsCardProps {
-  count: number;
+interface StatsCardProps {
   title?: string;
+  count?: number;
   subtitle?: string;
-  period?: string;
-  variant?: 'default' | 'primary' | 'secondary';
-  className?: string;
-  onClick?: () => void;
+  icon?: LucideIcon;
+  iconColor?: string;
+  iconBg?: string;
 }
 
-const SubjectsCard: React.FC<SubjectsCardProps> = ({
-  count,
-  title = "Total Subjects",
-  subtitle = "This semester",
-  period,
-  variant = 'default',
-  className = '',
-  onClick
+const StatsCard: React.FC<StatsCardProps> = ({ 
+  title = "Pending Tasks", 
+  count = 0, 
+  subtitle = "total assignments",
+  icon: Icon,
+  iconColor = "text-orange-500",
+  iconBg = "bg-orange-50"
 }) => {
-  const variantStyles = {
-    default: 'bg-white border border-gray-200',
-    primary: 'bg-blue-50 border border-blue-200',
-    secondary: 'bg-gray-50 border border-gray-200'
-  };
-
-  const countColors = {
-    default: 'text-gray-900',
-    primary: 'text-blue-600',
-    secondary: 'text-gray-700'
-  };
-
   return (
-    <div 
-      className={`
-        rounded-xl shadow-sm hover:shadow-md transition-all duration-300 
-        p-6 cursor-pointer transform hover:-translate-y-1
-        ${variantStyles[variant]} ${className}
-      `}
-      onClick={onClick}
-    >
-      {/* Count Display */}
-      <div className={`text-5xl font-bold mb-2 ${countColors[variant]}`}>
-        {count}
-      </div>
-      
-      {/* Title */}
-      <div className="text-lg font-semibold text-gray-800 mb-1">
-        {title}
-      </div>
-      
-      {/* Subtitle and Period */}
-      <div className="flex justify-between items-center">
-        <span className="text-sm text-gray-600">
-          {subtitle}
-        </span>
-        {period && (
-          <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
-            {period}
-          </span>
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
+      <div className="flex items-start justify-between mb-4">
+        <h3 className="text-gray-600 text-sm font-medium">{title}</h3>
+        {Icon && (
+          <div className={`${iconBg} p-2 rounded-lg`}>
+            <Icon className={`w-5 h-5 ${iconColor}`} />
+          </div>
         )}
+      </div>
+      <div className="space-y-1">
+        <p className="text-4xl font-bold text-gray-900">{count}</p>
+        <p className="text-sm text-gray-500">
+          {count} {subtitle}
+        </p>
       </div>
     </div>
   );
 };
 
-export default SubjectsCard;
+export default StatsCard;

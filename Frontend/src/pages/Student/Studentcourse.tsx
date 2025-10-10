@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { Clock, Users, Video, Download, CheckCircle, PlayCircle, Star, Filter, Search, BookOpen, FileText, Award, TrendingUp, AlertCircle } from 'lucide-react';
 import Navbar from '../../components/Navbar';
 import Sidebar from '../../components/Sidebar';
-import { LoadingSpinner, ErrorDisplay, EmptyState } from '../../components/LoadingError';
+import StatsCard from '../../components/Cardstats';
+import { LoadingSpinner, ErrorDisplay, EmptyState } from '../../components/Loadingerror';
 
 const API_BASE_URL = "http://localhost:5000/api";
 
@@ -207,58 +208,43 @@ export default function StudentCoursesPage() {
           </div>
         </div>
 
+        {/* Stats Cards using StatsCard Component */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white border border-gray-200 rounded-lg p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 font-medium">Total Subjects</p>
-                <p className="text-2xl font-semibold text-gray-900 mt-2">{totalSubjects}</p>
-                <p className="text-xs text-gray-500 mt-1">This semester</p>
-              </div>
-              <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center">
-                <BookOpen className="w-5 h-5 text-blue-600" />
-              </div>
-            </div>
-          </div>
+          <StatsCard
+            title="Total Subjects"
+            count={totalSubjects}
+            subtitle="This semester"
+            icon={BookOpen}
+            iconColor="text-blue-600"
+            iconBg="bg-blue-50"
+          />
 
-          <div className="bg-white border border-gray-200 rounded-lg p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 font-medium">Video Lectures</p>
-                <p className="text-2xl font-semibold text-gray-900 mt-2">{totalVideos}</p>
-                <p className="text-xs text-gray-500 mt-1">Available</p>
-              </div>
-              <div className="w-10 h-10 bg-green-50 rounded-lg flex items-center justify-center">
-                <Video className="w-5 h-5 text-green-600" />
-              </div>
-            </div>
-          </div>
+          <StatsCard
+            title="Video Lectures"
+            count={totalVideos}
+            subtitle="Available"
+            icon={Video}
+            iconColor="text-green-600"
+            iconBg="bg-green-50"
+          />
 
-          <div className="bg-white border border-gray-200 rounded-lg p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 font-medium">Study Materials</p>
-                <p className="text-2xl font-semibold text-gray-900 mt-2">{totalPdfs}</p>
-                <p className="text-xs text-gray-500 mt-1">PDFs available</p>
-              </div>
-              <div className="w-10 h-10 bg-purple-50 rounded-lg flex items-center justify-center">
-                <FileText className="w-5 h-5 text-purple-600" />
-              </div>
-            </div>
-          </div>
+          <StatsCard
+            title="Study Materials"
+            count={totalPdfs}
+            subtitle="PDFs available"
+            icon={FileText}
+            iconColor="text-purple-600"
+            iconBg="bg-purple-50"
+          />
 
-          <div className="bg-white border border-gray-200 rounded-lg p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 font-medium">Total Materials</p>
-                <p className="text-2xl font-semibold text-gray-900 mt-2">{posts.length}</p>
-                <p className="text-xs text-gray-500 mt-1">Resources</p>
-              </div>
-              <div className="w-10 h-10 bg-amber-50 rounded-lg flex items-center justify-center">
-                <Award className="w-5 h-5 text-amber-600" />
-              </div>
-            </div>
-          </div>
+          <StatsCard
+            title="Total Materials"
+            count={posts.length}
+            subtitle="Resources"
+            icon={Award}
+            iconColor="text-amber-600"
+            iconBg="bg-amber-50"
+          />
         </div>
 
         <div className="bg-white border border-gray-200 rounded-lg p-4">
