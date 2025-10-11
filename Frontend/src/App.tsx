@@ -18,6 +18,7 @@ import StudentAssignmentsPage from './pages/Student/Studentassingment';
 //admin
 import AdminDashboardPage from './pages/Admin/Admindashboard';
 import AdminStudents from './pages/Admin/Student';
+import AdminTeachers from './pages/Admin/Teacher';
 
 function App() {
   return (
@@ -84,6 +85,15 @@ function App() {
             element={
               <ProtectedRoute role="admin">
                 <AdminStudents />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/admin/teachers"
+            element={
+              <ProtectedRoute role="admin">
+                <AdminTeachers/>
               </ProtectedRoute>
             }
           />

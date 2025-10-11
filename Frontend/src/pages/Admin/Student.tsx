@@ -7,13 +7,17 @@ import {
   Mail, 
   GraduationCap,
   CheckCircle,
-  XCircle,
-  X
+  XCircle
 } from "lucide-react";
 import Navbar from "../../components/Navbar";
 import Sidebar from "../../components/Sidebar";
 import DataTable, { type Column, type Action } from "../../components/Table";
-import { LoadingSpinner, ErrorDisplay } from "../../components/LoadingError";
+import ConfirmDialog from "../../components/Confirmationdialogue";
+import UserFormModal from "../../components/UserFormModal";
+import StatsCard from "../../components/Cardstats";
+import { LoadingSpinner, ErrorDisplay } from "../../components/Loadingerror";
+import { toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 const API_BASE_URL = "http://localhost:5000/api";
 
@@ -28,16 +32,95 @@ export default function AdminStudents() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState(null);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [studentToDelete, setStudentToDelete] = useState(null);
+  
+  const [confirmDialog, setConfirmDialog] = useState({
+    isOpen: false,
+    type: "danger",
+    title: "",
+    message: "",
+    onConfirm: () => {}
+  });
 
   const [newStudent, setNewStudent] = useState({
     fullName: "",
     email: "",
     password: "",
-    grade: "",
-    assignedSubjects: []
+    grade: ""
   });
+
+  // Define form fields for student
+  const studentAddFields = [
+    {
+      name: "fullName",
+      label: "Full Name",
+      type: "text" as const,
+      placeholder: "Enter full name",
+      required: true
+    },
+    {
+      name: "email",
+      label: "Email",
+      type: "email" as const,
+      placeholder: "student@example.com",
+      required: true
+    },
+    {
+      name: "password",
+      label: "Password",
+      type: "password" as const,
+      placeholder: "Enter password",
+      required: true
+    },
+    {
+      name: "grade",
+      label: "Grade",
+      type: "select" as const,
+      required: true,
+      options: [
+        { value: "9", label: "Grade 9" },
+        { value: "10", label: "Grade 10" },
+        { value: "11", label: "Grade 11" },
+        { value: "12", label: "Grade 12" }
+      ]
+    }
+  ];
+
+  const studentEditFields = [
+    {
+      name: "fullName",
+      label: "Full Name",
+      type: "text" as const,
+      required: true
+    },
+    {
+      name: "email",
+      label: "Email",
+      type: "email" as const,
+      required: true
+    },
+    {
+      name: "grade",
+      label: "Grade",
+      type: "select" as const,
+      required: true,
+      options: [
+        { value: "9", label: "Grade 9" },
+        { value: "10", label: "Grade 10" },
+        { value: "11", label: "Grade 11" },
+        { value: "12", label: "Grade 12" }
+      ]
+    },
+    {
+      name: "isApproved",
+      label: "Approval Status",
+      type: "select" as const,
+      required: true,
+      options: [
+        { value: "false", label: "Pending" },
+        { value: "true", label: "Approved" }
+      ]
+    }
+  ];
 
   useEffect(() => {
     fetchStudents();
@@ -89,35 +172,31 @@ export default function AdminStudents() {
     e.preventDefault();
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch(`${API_BASE_URL}/auth/register`, {
+      const response = await fetch(`${API_BASE_URL}/admin/create-student`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify({
-          ...newStudent,
-          role: "student"
-        })
+        body: JSON.stringify(newStudent)
       });
 
       if (response.ok) {
-        alert("Student added successfully!");
+        toast.success("Student added successfully!");
         setShowAddModal(false);
         setNewStudent({
           fullName: "",
           email: "",
           password: "",
-          grade: "",
-          assignedSubjects: []
+          grade: ""
         });
         fetchStudents();
       } else {
         const data = await response.json();
-        alert(data.message || "Failed to add student");
+        toast.error(data.message || "Failed to add student");
       }
     } catch (err) {
-      alert("Error adding student: " + err.message);
+      toast.error("Error adding student: " + err.message);
     }
   };
 
@@ -125,62 +204,104 @@ export default function AdminStudents() {
     e.preventDefault();
     try {
       const token = localStorage.getItem("token");
+      
+      // Convert isApproved string to boolean
+      const updateData = {
+        ...selectedStudent,
+        isApproved: selectedStudent.isApproved === "true" || selectedStudent.isApproved === true
+      };
+      
       const response = await fetch(`${API_BASE_URL}/admin/users/${selectedStudent._id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify(selectedStudent)
+        body: JSON.stringify(updateData)
       });
 
       if (response.ok) {
-        alert("Student updated successfully!");
+        toast.success("Student updated successfully!");
         setShowEditModal(false);
         setSelectedStudent(null);
         fetchStudents();
       } else {
         const data = await response.json();
-        alert(data.message || "Failed to update student");
+        toast.error(data.message || "Failed to update student");
       }
     } catch (err) {
-      alert("Error updating student: " + err.message);
+      toast.error("Error updating student: " + err.message);
     }
   };
 
-  const handleDeleteStudent = async () => {
+  const handleApproveStudent = async (student) => {
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch(`${API_BASE_URL}/admin/users/${studentToDelete._id}`, {
+      const response = await fetch(`${API_BASE_URL}/admin/approve-student/${student._id}`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (response.ok) {
+        toast.success(`${student.fullName} approved successfully!`);
+        fetchStudents();
+      } else {
+        const data = await response.json();
+        toast.error(data.message || "Failed to approve student");
+      }
+    } catch (err) {
+      toast.error("Error approving student: " + err.message);
+    }
+  };
+
+  const handleDeleteStudent = async (student) => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(`${API_BASE_URL}/admin/users/${student._id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` }
       });
 
       if (response.ok) {
-        alert("Student deleted successfully!");
-        setShowDeleteConfirm(false);
-        setStudentToDelete(null);
+        toast.success("Student deleted successfully!");
         fetchStudents();
       } else {
         const data = await response.json();
-        alert(data.message || "Failed to delete student");
+        toast.error(data.message || "Failed to delete student");
       }
     } catch (err) {
-      alert("Error deleting student: " + err.message);
+      toast.error("Error deleting student: " + err.message);
     }
   };
 
   const openEditModal = (student) => {
-    setSelectedStudent({ ...student });
+    setSelectedStudent({
+      ...student,
+      isApproved: student.isApproved ? "true" : "false"
+    });
     setShowEditModal(true);
   };
 
-  const openDeleteConfirm = (student) => {
-    setStudentToDelete(student);
-    setShowDeleteConfirm(true);
+  const openApproveConfirm = (student) => {
+    setConfirmDialog({
+      isOpen: true,
+      type: "info",
+      title: "Approve Student",
+      message: `Are you sure you want to approve <strong>${student.fullName}</strong>? They will be able to access the system immediately.`,
+      onConfirm: () => handleApproveStudent(student)
+    });
   };
 
-  // Define table columns
+  const openDeleteConfirm = (student) => {
+    setConfirmDialog({
+      isOpen: true,
+      type: "danger",
+      title: "Delete Student",
+      message: `Are you sure you want to delete <strong>${student.fullName}</strong>? This action cannot be undone.`,
+      onConfirm: () => handleDeleteStudent(student)
+    });
+  };
+
   const columns: Column[] = [
     {
       header: "Student",
@@ -251,17 +372,22 @@ export default function AdminStudents() {
             Approved
           </span>
         ) : (
-          <span className="flex items-center gap-1 px-2 py-1 bg-orange-100 text-orange-700 rounded-full text-xs font-medium w-fit">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              openApproveConfirm(row);
+            }}
+            className="flex items-center gap-1 px-2 py-1 bg-orange-100 text-orange-700 rounded-full text-xs font-medium w-fit hover:bg-orange-200 transition-colors cursor-pointer"
+          >
             <XCircle className="w-3 h-3" />
-            Pending
-          </span>
+            Pending - Click to Approve
+          </button>
         )
       ),
       className: "whitespace-nowrap"
     }
   ];
 
-  // Define table actions
   const actions: Action[] = [
     {
       icon: "edit",
@@ -290,7 +416,6 @@ export default function AdminStudents() {
      
       <main className="lg:ml-64 p-6 lg:p-8">
         <div className="mt-10">
-          {/* Header */}
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
             <div>
               <h1 className="text-2xl font-semibold text-gray-900">Students Management</h1>
@@ -307,50 +432,35 @@ export default function AdminStudents() {
             </button>
           </div>
 
-          {/* Stats Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <Users className="w-5 h-5 text-blue-600" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-gray-900">{students.length}</p>
-                  <p className="text-sm text-gray-600">Total Students</p>
-                </div>
-              </div>
-            </div>
+            <StatsCard
+              title="Total Students"
+              count={students.length}
+              subtitle="registered students"
+              icon={Users}
+              iconColor="text-blue-600"
+              iconBg="bg-blue-100"
+            />
 
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                  <CheckCircle className="w-5 h-5 text-green-600" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {students.filter(s => s.isApproved).length}
-                  </p>
-                  <p className="text-sm text-gray-600">Approved</p>
-                </div>
-              </div>
-            </div>
+            <StatsCard
+              title="Approved Students"
+              count={students.filter(s => s.isApproved).length}
+              subtitle="approved students"
+              icon={CheckCircle}
+              iconColor="text-green-600"
+              iconBg="bg-green-100"
+            />
 
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
-                  <XCircle className="w-5 h-5 text-orange-600" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {students.filter(s => !s.isApproved).length}
-                  </p>
-                  <p className="text-sm text-gray-600">Pending</p>
-                </div>
-              </div>
-            </div>
+            <StatsCard
+              title="Pending Approval"
+              count={students.filter(s => !s.isApproved).length}
+              subtitle="pending students"
+              icon={XCircle}
+              iconColor="text-orange-600"
+              iconBg="bg-orange-100"
+            />
           </div>
 
-          {/* Filters */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="relative">
@@ -385,7 +495,6 @@ export default function AdminStudents() {
             </div>
           </div>
 
-          {/* Students Table - Using Reusable Component */}
           <DataTable
             columns={columns}
             data={filteredStudents}
@@ -395,226 +504,37 @@ export default function AdminStudents() {
         </div>
       </main>
 
-      {/* Add Student Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
-              <h2 className="text-xl font-semibold text-gray-900">Add New Student</h2>
-              <button
-                onClick={() => setShowAddModal(false)}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        onClose={() => setConfirmDialog({ ...confirmDialog, isOpen: false })}
+        onConfirm={confirmDialog.onConfirm}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        type={confirmDialog.type}
+        confirmText={confirmDialog.type === "info" ? "Approve" : "Delete"}
+      />
 
-            <form onSubmit={handleAddStudent} className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Full Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={newStudent.fullName}
-                  onChange={(e) => setNewStudent({ ...newStudent, fullName: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter full name"
-                />
-              </div>
+      <UserFormModal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onSubmit={handleAddStudent}
+        title="Add New Student"
+        formData={newStudent}
+        setFormData={setNewStudent}
+        fields={studentAddFields}
+        submitButtonText="Add Student"
+      />
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Email *
-                </label>
-                <input
-                  type="email"
-                  required
-                  value={newStudent.email}
-                  onChange={(e) => setNewStudent({ ...newStudent, email: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  placeholder="student@example.com"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Password *
-                </label>
-                <input
-                  type="password"
-                  required
-                  value={newStudent.password}
-                  onChange={(e) => setNewStudent({ ...newStudent, password: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter password"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Grade *
-                </label>
-                <select
-                  required
-                  value={newStudent.grade}
-                  onChange={(e) => setNewStudent({ ...newStudent, grade: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Select Grade</option>
-                  <option value="9">Grade 9</option>
-                  <option value="10">Grade 10</option>
-                  <option value="11">Grade 11</option>
-                  <option value="12">Grade 12</option>
-                </select>
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowAddModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  Add Student
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Student Modal */}
-      {showEditModal && selectedStudent && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
-              <h2 className="text-xl font-semibold text-gray-900">Edit Student</h2>
-              <button
-                onClick={() => setShowEditModal(false)}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleEditStudent} className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Full Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={selectedStudent.fullName}
-                  onChange={(e) => setSelectedStudent({ ...selectedStudent, fullName: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Email *
-                </label>
-                <input
-                  type="email"
-                  required
-                  value={selectedStudent.email}
-                  onChange={(e) => setSelectedStudent({ ...selectedStudent, email: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Grade *
-                </label>
-                <select
-                  required
-                  value={selectedStudent.grade}
-                  onChange={(e) => setSelectedStudent({ ...selectedStudent, grade: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Select Grade</option>
-                  <option value="9">Grade 9</option>
-                  <option value="10">Grade 10</option>
-                  <option value="11">Grade 11</option>
-                  <option value="12">Grade 12</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Approval Status
-                </label>
-                <select
-                  value={selectedStudent.isApproved ? "true" : "false"}
-                  onChange={(e) => setSelectedStudent({ ...selectedStudent, isApproved: e.target.value === "true" })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="false">Pending</option>
-                  <option value="true">Approved</option>
-                </select>
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowEditModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  Update Student
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Confirmation Modal */}
-      {showDeleteConfirm && studentToDelete && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
-            <div className="p-6">
-              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Trash2 className="w-6 h-6 text-red-600" />
-              </div>
-              <h2 className="text-xl font-semibold text-gray-900 text-center mb-2">
-                Delete Student?
-              </h2>
-              <p className="text-gray-600 text-center mb-6">
-                Are you sure you want to delete <strong>{studentToDelete.fullName}</strong>? This action cannot be undone.
-              </p>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setShowDeleteConfirm(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleDeleteStudent}
-                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <UserFormModal
+        isOpen={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        onSubmit={handleEditStudent}
+        title="Edit Student"
+        formData={selectedStudent || {}}
+        setFormData={setSelectedStudent}
+        fields={studentEditFields}
+        submitButtonText="Update Student"
+      />
     </div>
   );
 }
