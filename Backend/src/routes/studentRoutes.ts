@@ -2,56 +2,53 @@ import express from "express";
 import { protect } from "../middleware/authMiddleware";
 import { upload } from "../middleware/uploadMiddleware";
 
-// 🧾 Controllers
+// Dashboard
+import { 
+  getStudentDashboard,
+  getAcademicHistory 
+} from "../controllers/Student/dashboardcontroller";
+
+// Assignments
 import {
   getAssignmentsForStudent,
-  getAssignmentById,
+  getAssignmentById
 } from "../controllers/Student/assignmentcontroller";
 
+// Submissions
 import {
   submitAssignment,
   getMySubmissions,
+  getSubmissionById
 } from "../controllers/Student/submissioncontroller";
 
+// Posts
 import {
   getPostsForStudent,
-  getPostById,
+  getPostById
 } from "../controllers/Student/postcontroller";
-
-import { getStudentDashboard } from "../controllers/Student/dashboardcontroller";
 
 const router = express.Router();
 
+// ============ DASHBOARD ============
+router.get("/dashboard", protect, getStudentDashboard);
+router.get("/academic-history", protect, getAcademicHistory);
 
-
-// ✅ Get all assignments for the logged-in student
+// ============ ASSIGNMENTS ============
 router.get("/assignments", protect, getAssignmentsForStudent);
-
-// ✅ Get a specific assignment by ID
 router.get("/assignments/:assignmentId", protect, getAssignmentById);
 
-
-
-
-// ✅ Submit assignment (with file upload)
-router.post("/assignments/submit", protect, upload.single("file"), submitAssignment);
-
-// ✅ Get all submissions of the logged-in student
+// ============ SUBMISSIONS ============
+router.post(
+  "/assignments/submit",
+  protect,
+  upload.single("file"),
+  submitAssignment
+);
 router.get("/submissions", protect, getMySubmissions);
+router.get("/submissions/:submissionId", protect, getSubmissionById);
 
-
-
-// ✅ Get all posts for the student’s grade and subject
+// ============ POSTS ============
 router.get("/posts", protect, getPostsForStudent);
-
-// ✅ Get details of a single post
 router.get("/posts/:postId", protect, getPostById);
 
-
-
-
-// ✅ Get student dashboard summary
-router.get("/dashboard", protect, getStudentDashboard);
-
 export default router;
-

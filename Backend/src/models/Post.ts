@@ -1,22 +1,26 @@
-import mongoose, { Document, Schema } from "mongoose";
+import mongoose, { Schema, Document } from "mongoose";
 
 export interface IPost extends Document {
   teacherId: mongoose.Types.ObjectId;
+  subjectId: mongoose.Types.ObjectId;
   title: string;
-  contentType: "video" | "pdf";
+  contentType: "video" | "pdf" | "document";
   fileUrl: string;
-  grade: string;
-  subject: string;
+  semester: number;
+  groups: mongoose.Types.ObjectId[];
+  description?: string;
 }
 
 const postSchema = new Schema<IPost>(
   {
-    teacherId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    teacherId: { type: Schema.Types.ObjectId, ref: "Teacher", required: true },
+    subjectId: { type: Schema.Types.ObjectId, ref: "Subject", required: true },
     title: { type: String, required: true },
-    contentType: { type: String, enum: ["video", "pdf"], required: true },
+    contentType: { type: String, enum: ["video", "pdf", "document"], required: true },
     fileUrl: { type: String, required: true },
-    grade: { type: String, required: true },
-    subject: { type: String, required: true }
+    semester: { type: Number, required: true },
+    groups: [{ type: Schema.Types.ObjectId, ref: "Group" }],
+    description: String
   },
   { timestamps: true }
 );

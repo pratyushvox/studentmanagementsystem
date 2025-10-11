@@ -1,77 +1,134 @@
-// controllers/dashboardController.ts
 import { Request, Response } from "express";
+import Student from "../../models/Student";
 import Assignment from "../../models/Assignment";
 import Submission from "../../models/Submission";
 import Post from "../../models/Post";
-import User from "../../models/User";
 
-//  Get student dashboard summary
 export const getStudentDashboard = async (req: Request, res: Response) => {
   try {
-    
     if (!req.user) {
       return res.status(401).json({ message: "User not authenticated" });
     }
 
-    const student = await User.findById(req.user._id);
-    if (!student) return res.status(404).json({ message: "Student not found" });
+    const student = await Student.findOne({ userId: req.user._id })
+      .populate("groupId", "name semester academicYear")
+      .populate("userId", "fullName email");
 
-    
-    const subjectFilter = student.assignedSubjects && student.assignedSubjects.length > 0
-      ? { $in: student.assignedSubjects }
-      : { $exists: true };
+    if (!student) {
+      return res.status(404).json({ message: "Student not found" });
+    }
 
-    const pendingAssignments = await Assignment.countDocuments({
-      grade: student.grade,
-      subject: subjectFilter,
-      deadline: { $gte: new Date() },
-    });
+    // Pending assignments
+    const pendingAssignments = student.groupId 
+      ? await Assignment.countDocuments({
+          semester: student.currentSemester,
+          groups: student.groupId,
+          deadline: { $gte: new Date() }
+        })
+      : 0;
 
-    const submittedIds = await Submission.find({ studentId: req.user._id }).distinct("assignmentId");
+    // Submitted assignment IDs
+    const submittedIds = await Submission.find({ 
+      studentId: student._id 
+    }).distinct("assignmentId");
 
-    const notSubmittedCount = await Assignment.countDocuments({
-      _id: { $nin: submittedIds },
-      grade: student.grade,
-      deadline: { $gte: new Date() },
-    });
+    const notSubmittedCount = student.groupId
+      ? await Assignment.countDocuments({
+          _id: { $nin: submittedIds },
+          semester: student.currentSemester,
+          groups: student.groupId,
+          deadline: { $gte: new Date() }
+        })
+      : 0;
 
-    const submissions = await Submission.find({ studentId: req.user._id });
-    
-    // Fix 3: Proper type checking for grade
-    const gradedSubmissions = submissions.filter((s) => s.grade !== undefined && s.grade !== null);
-    const averageGrade =
-      gradedSubmissions.length > 0
-        ? gradedSubmissions.reduce((sum, s) => sum + (s.grade ?? 0), 0) / gradedSubmissions.length
-        : 0;
+    // Submissions
+    const submissions = await Submission.find({ studentId: student._id });
+    const gradedSubmissions = submissions.filter(s => s.status === "graded");
+    const averageMarks = gradedSubmissions.length > 0
+      ? gradedSubmissions.reduce((sum, s) => sum + (s.marks || 0), 0) / gradedSubmissions.length
+      : 0;
 
-    const recentPosts = await Post.countDocuments({
-      grade: student.grade,
-      createdAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
-    });
+    // Current semester performance
+    const currentHistory = student.academicHistory.find(
+      h => h.semester === student.currentSemester
+    );
+
+    const passedSubjects = currentHistory 
+      ? currentHistory.subjects.filter(s => s.passed).length
+      : 0;
+    const totalSubjects = currentHistory 
+      ? currentHistory.subjects.length 
+      : 0;
+
+    // Recent posts
+    const recentPosts = student.groupId
+      ? await Post.countDocuments({
+          semester: student.currentSemester,
+          groups: student.groupId,
+          createdAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
+        })
+      : 0;
 
     res.json({
       message: "Dashboard data fetched successfully",
       dashboard: {
         student: {
-          name: student.fullName,
-          grade: student.grade,
-          subjects: student.assignedSubjects,
+          name: req.user.fullName,
+          studentId: student.studentId,
+          semester: student.currentSemester,
+          group: student.groupId,
+          status: student.status,
+          enrollmentYear: student.enrollmentYear
         },
         assignments: {
           pending: notSubmittedCount,
           total: pendingAssignments,
-          submitted: submissions.length,
+          submitted: submissions.length
         },
         performance: {
           totalSubmissions: submissions.length,
           gradedSubmissions: gradedSubmissions.length,
-          ungradedSubmissions: submissions.length - gradedSubmissions.length,
-          averageGrade: Math.round(averageGrade * 100) / 100,
+          pendingGrading: submissions.length - gradedSubmissions.length,
+          averageMarks: Math.round(averageMarks * 100) / 100,
+          passedSubjects,
+          totalSubjects,
+          semesterProgress: totalSubjects > 0 
+            ? Math.round((passedSubjects / totalSubjects) * 100) 
+            : 0
         },
         recentActivity: {
-          newPostsThisWeek: recentPosts,
-        },
-      },
+          newPostsThisWeek: recentPosts
+        }
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// Get academic history
+export const getAcademicHistory = async (req: Request, res: Response) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ message: "User not authenticated" });
+    }
+
+    const student = await Student.findOne({ userId: req.user._id })
+      .populate("academicHistory.groupId", "name semester")
+      .populate("academicHistory.subjects.subjectId", "name code credits")
+      .populate("academicHistory.subjects.teacherId", "teacherId")
+      .populate({
+        path: "academicHistory.subjects.teacherId",
+        populate: { path: "userId", select: "fullName" }
+      });
+
+    if (!student) {
+      return res.status(404).json({ message: "Student not found" });
+    }
+
+    res.json({
+      message: "Academic history fetched",
+      academicHistory: student.academicHistory
     });
   } catch (err: any) {
     res.status(500).json({ message: err.message });

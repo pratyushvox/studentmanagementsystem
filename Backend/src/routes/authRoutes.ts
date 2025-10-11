@@ -1,16 +1,22 @@
 import express from "express";
-import { registerStudent, loginUser, createTeacher, approveStudent } from "../controllers/authController";
-import { protect, adminOnly } from "../middleware/authMiddleware";
+import { protect } from "../middleware/authMiddleware";
+import {
+  registerStudent,
+  loginUser,
+  getMyProfile,
+  updateMyProfile,
+  changePassword
+} from "../controllers/authController";
 
 const router = express.Router();
 
+// Public routes
 router.post("/register/student", registerStudent);
 router.post("/login", loginUser);
 
-// Admin only routes
-router.post("/create/teacher", protect, adminOnly, createTeacher);
-router.put("/approve/student/:studentId", protect, adminOnly, approveStudent);
+// Protected routes
+router.get("/profile", protect, getMyProfile);
+router.put("/profile", protect, updateMyProfile);
+router.put("/change-password", protect, changePassword);
 
 export default router;
-
-

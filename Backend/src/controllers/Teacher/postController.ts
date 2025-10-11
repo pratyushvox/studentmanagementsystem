@@ -5,7 +5,7 @@ import Post from "../../models/Post";
 //  Create a new post (video/pdf)
 export const createPost = async (req: Request, res: Response) => {
   try {
-    // Fix 1: Add type guard for req.user
+    
     if (!req.user) {
       return res.status(401).json({ message: "User not authenticated" });
     }

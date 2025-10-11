@@ -3,7 +3,7 @@ import User from "../../models/User";
 import Assignment from "../../models/Assignment";
 import Submission from "../../models/Submission";
 import Post from "../../models/Post";
-import TeacherEditRequest from "../../models/TeacherEditRequest";
+
 
 // Dashboard overview
 export const getDashboardStats = async (_req: Request, res: Response) => {
