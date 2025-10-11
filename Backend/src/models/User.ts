@@ -22,7 +22,9 @@ const userSchema = new Schema<IUser>({
   isApproved: { type: Boolean, default: false }
 });
 
-export default mongoose.model<IUser>("User", userSchema);
+export default mongoose.model<IUser>("User", userSchema); 
+
+
 
 
 

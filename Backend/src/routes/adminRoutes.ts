@@ -11,6 +11,12 @@ import {
 } from "../controllers/Admin/adminUserController";
 
 import {
+  promoteAllStudents,
+  promoteGrade,
+  getGradeStats,
+} from "../controllers/Admin/adminUserController";
+
+import {
   getAllAssignments,
   getAssignmentById,
   deleteAnyAssignment,
@@ -36,6 +42,13 @@ import {
   getTeacherRequestById,
 } from "../controllers/Admin/adminTeacherRequestController";
 
+// Auth Controllers for creating users
+import {
+  createStudent,
+  createTeacher,
+  approveStudent,
+} from "../controllers/authController";
+
 const router = express.Router();
 
 /* ============================================================
@@ -50,6 +63,20 @@ router.get("/users", protect, adminOnly, getAllUsers);
 router.get("/users/:id", protect, adminOnly, getUserById);
 router.put("/users/:id", protect, adminOnly, updateAnyUser);
 router.delete("/users/:id", protect, adminOnly, deleteAnyUser);
+
+/* ============================================================
+ ✨ USER CREATION (Admin creates students/teachers)
+============================================================ */
+router.post("/create-student", protect, adminOnly, createStudent);
+router.post("/create-teacher", protect, adminOnly, createTeacher);
+router.patch("/approve-student/:studentId", protect, adminOnly, approveStudent);
+
+/* ============================================================
+ 📚 GRADE MANAGEMENT
+============================================================ */
+router.put("/users/promote/all", protect, adminOnly, promoteAllStudents);
+router.put("/users/promote/:grade", protect, adminOnly, promoteGrade);
+router.get("/users/stats/grades", protect, adminOnly, getGradeStats);
 
 /* ============================================================
  📘 ASSIGNMENT MANAGEMENT
