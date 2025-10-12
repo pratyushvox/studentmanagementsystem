@@ -13,23 +13,42 @@ import {
   BarChart3,
   PieChart,
   Calendar,
-  Download
+  Download,
+  BookMarked,
+  UsersRound,
+  UserX,
+  Mail
 } from "lucide-react";
 import Navbar from "../../components/Navbar";
 import Sidebar from "../../components/Sidebar";
-import { LoadingSpinner, ErrorDisplay } from "../../components/LoadingError";
+import StatsCard from "../../components/Cardstats";
+import ConfirmDialog from "../../components/Confirmationdialogue";
+import { LoadingSpinner, ErrorDisplay } from "../../components/Loadingerror";
+import { toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+
 
 // API Base URL
 const API_BASE_URL = "http://localhost:5000/api";
 
 export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [stats, setStats] = useState(null);
+  const [error, setError] = useState<string | null>(null);
+  const [stats, setStats] = useState<any>(null);
   const [recentUsers, setRecentUsers] = useState([]);
-  const [recentAssignments, setRecentAssignments] = useState([]);
-  const [pendingRequests, setPendingRequests] = useState([]);
+  const [recentAssignments, setRecentAssignments] = useState<any[]>([]);
+  const [semesterStats, setSemesterStats] = useState<any[]>([]);
+  const [pendingStudents, setPendingStudents] = useState<any[]>([]);
   const [activeItem, setActiveItem] = useState("dashboard");
+  
+  // Confirm Dialog State
+  const [confirmDialog, setConfirmDialog] = useState({
+    isOpen: false,
+    type: 'info' as 'danger' | 'warning' | 'info',
+    title: '',
+    message: '',
+    onConfirm: () => {}
+  });
 
   useEffect(() => {
     fetchDashboardData();
@@ -46,30 +65,38 @@ export default function AdminDashboard() {
       });
       const statsData = await statsRes.json();
 
-      // Fetch recent users
-      const usersRes = await fetch(`${API_BASE_URL}/admin/users`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const usersData = await usersRes.json();
-
       // Fetch recent assignments
       const assignmentsRes = await fetch(`${API_BASE_URL}/admin/assignments`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const assignmentsData = await assignmentsRes.json();
 
-      // Fetch pending teacher requests
-      const requestsRes = await fetch(`${API_BASE_URL}/admin/teacher-requests/pending`, {
+      // Fetch semester statistics
+      const semesterRes = await fetch(`${API_BASE_URL}/admin/semester-stats`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      const requestsData = await requestsRes.json();
+      const semesterData = await semesterRes.json();
+
+      // Fetch pending students
+      try {
+        const usersRes = await fetch(`${API_BASE_URL}/admin/users`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const usersData = await usersRes.json();
+        const pending = usersData.filter((user: any) => 
+          user.role === 'student' && !user.isApproved
+        );
+        setPendingStudents(pending);
+      } catch (err) {
+        console.log("Couldn't fetch users, skipping pending students");
+        setPendingStudents([]);
+      }
 
       setStats(statsData);
-      setRecentUsers(usersData.slice(0, 5));
-      setRecentAssignments(assignmentsData.slice(0, 5));
-      setPendingRequests(requestsData.slice(0, 5));
+      setRecentAssignments(assignmentsData.slice(0, 6));
+      setSemesterStats(semesterData);
       setError(null);
-    } catch (err) {
+    } catch (err: any) {
       setError(err.message);
       console.error("Error fetching dashboard data:", err);
     } finally {
@@ -77,7 +104,73 @@ export default function AdminDashboard() {
     }
   };
 
-  const formatDate = (dateString) => {
+  const handleApproveStudent = async (studentId: string, studentName: string) => {
+    setConfirmDialog({
+      isOpen: true,
+      type: 'info',
+      title: 'Approve Student',
+      message: `Are you sure you want to approve <strong>${studentName}</strong>?<br/>They will be able to access the platform.`,
+      onConfirm: async () => {
+        try {
+          const token = localStorage.getItem("token");
+          const res = await fetch(`${API_BASE_URL}/admin/users/${studentId}/approve`, {
+            method: 'PATCH',
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          
+          if (!res.ok) {
+            const errorData = await res.json();
+            throw new Error(errorData.message || 'Failed to approve student');
+          }
+          
+          fetchDashboardData(); // Refresh data
+          toast.success(`${studentName} approved successfully!`, {
+            position: "top-right",
+            autoClose: 3000,
+          });
+        } catch (error: any) {
+          console.error("Error approving student:", error);
+          toast.error(error.message || "Failed to approve student", {
+            position: "top-right",
+            autoClose: 3000,
+          });
+        }
+      }
+    });
+  };
+
+  const handleRejectStudent = async (studentId: string, studentName: string) => {
+    setConfirmDialog({
+      isOpen: true,
+      type: 'danger',
+      title: 'Reject Student',
+      message: `Are you sure you want to reject <strong>${studentName}</strong>?<br/>Their account will be deleted.`,
+      onConfirm: async () => {
+        try {
+          const token = localStorage.getItem("token");
+          const res = await fetch(`${API_BASE_URL}/admin/users/${studentId}`, {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (res.ok) {
+            fetchDashboardData(); // Refresh data
+            toast.success(`${studentName} rejected and removed.`, {
+              position: "top-right",
+              autoClose: 3000,
+            });
+          }
+        } catch (error) {
+          console.error("Error rejecting student:", error);
+          toast.error("Failed to reject student", {
+            position: "top-right",
+            autoClose: 3000,
+          });
+        }
+      }
+    });
+  };
+
+  const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
@@ -85,7 +178,7 @@ export default function AdminDashboard() {
     });
   };
 
-  const getRoleBadgeColor = (role) => {
+  const getRoleBadgeColor = (role: string) => {
     switch(role) {
       case 'admin': return 'bg-purple-100 text-purple-700';
       case 'teacher': return 'bg-blue-100 text-blue-700';
@@ -94,7 +187,7 @@ export default function AdminDashboard() {
     }
   };
 
-  const getApprovalBadge = (isApproved) => {
+  const getApprovalBadge = (isApproved: boolean) => {
     return isApproved 
       ? <span className="flex items-center gap-1 text-xs text-green-600"><CheckCircle className="w-3 h-3" /> Approved</span>
       : <span className="flex items-center gap-1 text-xs text-orange-600"><Clock className="w-3 h-3" /> Pending</span>;
@@ -124,19 +217,10 @@ export default function AdminDashboard() {
           <div>
             <h1 className="text-2xl font-semibold text-gray-900">Admin Dashboard</h1>
             <p className="text-gray-600 text-sm mt-1">
-              Manage your educational platform
+              Manage your educational platform - Semester System
             </p>
           </div>
-          <div className="flex items-center gap-3">
-            <button className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm">
-              <Download className="w-4 h-4" />
-              Export Report
-            </button>
-            <div className="flex items-center gap-2 text-sm text-gray-500">
-              <Activity className="w-4 h-4" />
-              <span>Live</span>
-            </div>
-          </div>
+          
         </div>
 
         {/* Key Metrics Grid */}
@@ -150,7 +234,8 @@ export default function AdminDashboard() {
               <TrendingUp className="w-5 h-5 opacity-80" />
             </div>
             <h3 className="text-sm font-medium opacity-90 mb-1">Total Students</h3>
-            <p className="text-3xl font-bold">{stats.totalStudents}</p>
+            
+            <p className="text-3xl font-bold">{stats.totalStudents || 0}</p>
             <p className="text-xs opacity-80 mt-2">Active learners</p>
           </div>
 
@@ -163,152 +248,249 @@ export default function AdminDashboard() {
               <BarChart3 className="w-5 h-5 opacity-80" />
             </div>
             <h3 className="text-sm font-medium opacity-90 mb-1">Total Teachers</h3>
-            <p className="text-3xl font-bold">{stats.totalTeachers}</p>
+            <p className="text-3xl font-bold">{stats.totalTeachers || 0}</p>
             <p className="text-xs opacity-80 mt-2">Educators on platform</p>
           </div>
 
-          {/* Assignments */}
+          {/* Total Subjects */}
           <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform">
             <div className="flex items-center justify-between mb-4">
               <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center backdrop-blur-sm">
-                <FileText className="w-6 h-6" />
+                <BookMarked className="w-6 h-6" />
               </div>
               <PieChart className="w-5 h-5 opacity-80" />
             </div>
-            <h3 className="text-sm font-medium opacity-90 mb-1">Assignments</h3>
-            <p className="text-3xl font-bold">{stats.totalAssignments}</p>
-            <p className="text-xs opacity-80 mt-2">{stats.totalSubmissions} submissions</p>
+            <h3 className="text-sm font-medium opacity-90 mb-1">Total Subjects</h3>
+            <p className="text-3xl font-bold">{stats.totalSubjects || 0}</p>
+            <p className="text-xs opacity-80 mt-2">Across all semesters</p>
           </div>
 
-          {/* Pending Requests */}
+          {/* Total Groups */}
           <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform">
             <div className="flex items-center justify-between mb-4">
               <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center backdrop-blur-sm">
-                <Clock className="w-6 h-6" />
+                <UsersRound className="w-6 h-6" />
               </div>
               <AlertCircle className="w-5 h-5 opacity-80" />
             </div>
-            <h3 className="text-sm font-medium opacity-90 mb-1">Pending Requests</h3>
-            <p className="text-3xl font-bold">{stats.pendingRequests}</p>
-            <p className="text-xs opacity-80 mt-2">Awaiting approval</p>
+            <h3 className="text-sm font-medium opacity-90 mb-1">Total Groups</h3>
+            <p className="text-3xl font-bold">{stats.totalGroups || 0}</p>
+            <p className="text-xs opacity-80 mt-2">Student groups</p>
           </div>
         </div>
 
-        {/* Secondary Stats */}
+        {/* Secondary Stats - USING StatsCard Component */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-white rounded-xl shadow-md p-6 border border-gray-100">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-blue-50 rounded-lg flex items-center justify-center">
-                <BookOpen className="w-6 h-6 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">{stats.totalPosts}</p>
-                <p className="text-sm text-gray-600">Learning Posts</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl shadow-md p-6 border border-gray-100">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-green-50 rounded-lg flex items-center justify-center">
-                <CheckCircle className="w-6 h-6 text-green-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">{stats.totalSubmissions}</p>
-                <p className="text-sm text-gray-600">Total Submissions</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl shadow-md p-6 border border-gray-100">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-purple-50 rounded-lg flex items-center justify-center">
-                <Activity className="w-6 h-6 text-purple-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">
-                  {stats.totalStudents + stats.totalTeachers}
-                </p>
-                <p className="text-sm text-gray-600">Total Users</p>
-              </div>
-            </div>
-          </div>
+          <StatsCard
+            title="Pending Approvals"
+            count={pendingStudents.length}
+            subtitle="students waiting"
+            icon={Clock}
+            iconColor="text-orange-600"
+            iconBg="bg-orange-50"
+          />
+          
+          <StatsCard
+            title="Active Students"
+            count={stats.totalStudents || 0}
+            subtitle="enrolled students"
+            icon={Users}
+            iconColor="text-green-600"
+            iconBg="bg-green-50"
+          />
+          
+          <StatsCard
+            title="Learning Posts"
+            count={stats.totalPosts || 0}
+            subtitle="posts published"
+            icon={BookOpen}
+            iconColor="text-purple-600"
+            iconBg="bg-purple-50"
+          />
         </div>
 
-        {/* Main Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Recent Users */}
-          <div className="lg:col-span-2 bg-white rounded-xl shadow-md border border-gray-100">
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-gray-900">Recent Users</h2>
-              <Users className="w-5 h-5 text-gray-400" />
-            </div>
-            <div className="p-6">
-              {recentUsers.length === 0 ? (
-                <p className="text-center text-gray-500 py-8">No users found</p>
-              ) : (
-                <div className="space-y-4">
-                  {recentUsers.map((user) => (
-                    <div key={user._id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                      <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-bold">
-                          {user.fullName.charAt(0).toUpperCase()}
-                        </div>
-                        <div>
-                          <p className="font-semibold text-gray-900">{user.fullName}</p>
-                          <p className="text-xs text-gray-600">{user.email}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${getRoleBadgeColor(user.role)}`}>
-                          {user.role}
-                        </span>
-                        {getApprovalBadge(user.isApproved)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Pending Teacher Requests */}
+        {/* Pending Student Approvals & Recent Activity */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Pending Student Approvals */}
           <div className="bg-white rounded-xl shadow-md border border-gray-100">
             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-gray-900">Pending Requests</h2>
-              <AlertCircle className="w-5 h-5 text-orange-500" />
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-bold text-gray-900">Pending Approvals</h2>
+                {pendingStudents.length > 0 && (
+                  <span className="bg-orange-100 text-orange-700 text-xs font-semibold px-2 py-1 rounded-full">
+                    {pendingStudents.length}
+                  </span>
+                )}
+              </div>
+              <Clock className="w-5 h-5 text-orange-500" />
             </div>
-            <div className="p-6">
-              {pendingRequests.length === 0 ? (
+            <div className="p-6 max-h-96 overflow-y-auto">
+              {pendingStudents.length === 0 ? (
                 <div className="text-center py-8">
                   <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-2" />
-                  <p className="text-sm text-gray-600">All caught up!</p>
+                  <p className="text-sm text-gray-600 font-medium">All caught up!</p>
+                  <p className="text-xs text-gray-500 mt-1">No pending student approvals</p>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {pendingRequests.map((request) => (
-                    <div key={request._id} className="p-4 bg-orange-50 border border-orange-100 rounded-lg">
-                      <div className="flex items-start justify-between mb-2">
-                        <p className="font-semibold text-gray-900 text-sm">
-                          {request.teacherId?.fullName || "Teacher"}
-                        </p>
-                        <span className="px-2 py-1 bg-orange-200 text-orange-800 rounded text-xs font-medium">
-                          Pending
-                        </span>
+                <div className="space-y-3">
+                  {pendingStudents.slice(0, 5).map((student: any) => (
+                    <div key={student._id} className="border border-orange-100 bg-orange-50 rounded-lg p-4 hover:shadow-md transition-shadow">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-gradient-to-br from-orange-400 to-orange-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                            {student.fullName?.charAt(0).toUpperCase() || 'S'}
+                          </div>
+                          <div>
+                            <p className="font-semibold text-gray-900">{student.fullName}</p>
+                            <p className="text-xs text-gray-600 flex items-center gap-1">
+                              <Mail className="w-3 h-3" />
+                              {student.email}
+                            </p>
+                          </div>
+                        </div>
                       </div>
-                      <div className="space-y-1 text-xs text-gray-600">
-                        {request.requestedChanges?.grade && (
-                          <p>Grade: <span className="font-medium">{request.requestedChanges.grade}</span></p>
-                        )}
-                        {request.requestedChanges?.subject && (
-                          <p>Subject: <span className="font-medium">{request.requestedChanges.subject}</span></p>
-                        )}
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleApproveStudent(student._id, student.fullName)}
+                          className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+                        >
+                          <UserCheck className="w-4 h-4" />
+                          Approve
+                        </button>
+                        <button
+                          onClick={() => handleRejectStudent(student._id, student.fullName)}
+                          className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium"
+                        >
+                          <UserX className="w-4 h-4" />
+                          Reject
+                        </button>
                       </div>
                     </div>
                   ))}
+                  {pendingStudents.length > 5 && (
+                    <button 
+                      onClick={() => window.location.href = '/admin/users'}
+                      className="w-full text-center text-sm text-blue-600 hover:text-blue-700 font-medium py-2"
+                    >
+                      View all {pendingStudents.length} pending requests →
+                    </button>
+                  )}
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Recent Activity / System Stats */}
+          <div className="bg-white rounded-xl shadow-md border border-gray-100">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+              <h2 className="text-lg font-bold text-gray-900">System Activity</h2>
+              <Activity className="w-5 h-5 text-blue-500" />
+            </div>
+            <div className="p-6">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between p-4 bg-blue-50 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                      <Users className="w-5 h-5 text-blue-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">Total Users</p>
+                      <p className="text-xs text-gray-600">Students + Teachers</p>
+                    </div>
+                  </div>
+                  <p className="text-2xl font-bold text-blue-600">
+                    {(stats.totalStudents || 0) + (stats.totalTeachers || 0)}
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-between p-4 bg-purple-50 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                      <BarChart3 className="w-5 h-5 text-purple-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">Active Semesters</p>
+                      <p className="text-xs text-gray-600">With students enrolled</p>
+                    </div>
+                  </div>
+                  <p className="text-2xl font-bold text-purple-600">
+                    {semesterStats.filter((s: any) => s.totalStudents > 0).length}
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-between p-4 bg-emerald-50 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center">
+                      <GraduationCap className="w-5 h-5 text-emerald-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">Teaching Staff</p>
+                      <p className="text-xs text-gray-600">Active educators</p>
+                    </div>
+                  </div>
+                  <p className="text-2xl font-bold text-emerald-600">
+                    {stats.totalTeachers || 0}
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-between p-4 bg-orange-50 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                      <UsersRound className="w-5 h-5 text-orange-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">Student Groups</p>
+                      <p className="text-xs text-gray-600">Across all semesters</p>
+                    </div>
+                  </div>
+                  <p className="text-2xl font-bold text-orange-600">
+                    {stats.totalGroups || 0}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Semester Statistics */}
+        <div className="bg-white rounded-xl shadow-md border border-gray-100">
+          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+            <h2 className="text-lg font-bold text-gray-900">Semester Overview</h2>
+            <BarChart3 className="w-5 h-5 text-gray-400" />
+          </div>
+          <div className="p-6">
+            {semesterStats.length === 0 ? (
+              <p className="text-center text-gray-500 py-8">No semester data available</p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {semesterStats.map((sem) => (
+                  <div key={sem.semester} className="border border-gray-200 rounded-lg p-4 hover:border-blue-300 hover:shadow-md transition-all">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                        <span className="text-lg font-bold text-blue-600">{sem.semester}</span>
+                      </div>
+                      <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded text-xs font-medium">
+                        Semester {sem.semester}
+                      </span>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-gray-600">Students:</span>
+                        <span className="text-sm font-semibold text-gray-900">{sem.totalStudents}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-gray-600">Active:</span>
+                        <span className="text-sm font-semibold text-green-600">{sem.activeStudents}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-gray-600">Groups:</span>
+                        <span className="text-sm font-semibold text-purple-600">{sem.groups}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -330,7 +512,7 @@ export default function AdminDashboard() {
                         <FileText className="w-5 h-5 text-blue-600" />
                       </div>
                       <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs font-medium">
-                        {assignment.grade}
+                        Sem {assignment.semester || assignment.grade}
                       </span>
                     </div>
                     <h3 className="font-semibold text-gray-900 mb-2 line-clamp-2">
@@ -339,7 +521,7 @@ export default function AdminDashboard() {
                     <div className="space-y-1 text-xs text-gray-600">
                       <p className="flex items-center gap-1">
                         <BookOpen className="w-3 h-3" />
-                        {assignment.subject}
+                        {assignment.type ? `Type: ${assignment.type}` : assignment.subject}
                       </p>
                       <p className="flex items-center gap-1">
                         <Calendar className="w-3 h-3" />
@@ -355,27 +537,54 @@ export default function AdminDashboard() {
 
         {/* Quick Actions */}
         <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl shadow-lg p-6 text-white">
-          <h2 className="text-xl font-bold mb-4">Quick Actions</h2>
+          <h2 className="text-xl font-bold mb-4">Quick Management</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <button className="bg-white/20 backdrop-blur-sm hover:bg-white/30 rounded-lg p-4 transition-colors">
+            <button 
+              onClick={() => window.location.href = '/admin/subjects'}
+              className="bg-white/20 backdrop-blur-sm hover:bg-white/30 rounded-lg p-4 transition-colors"
+            >
+              <BookMarked className="w-6 h-6 mb-2 mx-auto" />
+              <p className="text-sm font-medium">Subjects</p>
+              <p className="text-xs opacity-80 mt-1">{stats.totalSubjects || 0} total</p>
+            </button>
+            <button 
+              onClick={() => window.location.href = '/admin/groups'}
+              className="bg-white/20 backdrop-blur-sm hover:bg-white/30 rounded-lg p-4 transition-colors"
+            >
+              <UsersRound className="w-6 h-6 mb-2 mx-auto" />
+              <p className="text-sm font-medium">Groups</p>
+              <p className="text-xs opacity-80 mt-1">{stats.totalGroups || 0} total</p>
+            </button>
+            <button 
+              onClick={() => window.location.href = '/admin/users'}
+              className="bg-white/20 backdrop-blur-sm hover:bg-white/30 rounded-lg p-4 transition-colors"
+            >
               <UserCheck className="w-6 h-6 mb-2 mx-auto" />
-              <p className="text-sm font-medium">Approve Users</p>
+              <p className="text-sm font-medium">Users</p>
+              <p className="text-xs opacity-80 mt-1">{pendingStudents.length} pending</p>
             </button>
-            <button className="bg-white/20 backdrop-blur-sm hover:bg-white/30 rounded-lg p-4 transition-colors">
-              <FileText className="w-6 h-6 mb-2 mx-auto" />
-              <p className="text-sm font-medium">Manage Assignments</p>
-            </button>
-            <button className="bg-white/20 backdrop-blur-sm hover:bg-white/30 rounded-lg p-4 transition-colors">
-              <BookOpen className="w-6 h-6 mb-2 mx-auto" />
-              <p className="text-sm font-medium">View Posts</p>
-            </button>
-            <button className="bg-white/20 backdrop-blur-sm hover:bg-white/30 rounded-lg p-4 transition-colors">
-              <BarChart3 className="w-6 h-6 mb-2 mx-auto" />
-              <p className="text-sm font-medium">Analytics</p>
+            <button 
+              onClick={() => window.location.href = '/admin/promotion'}
+              className="bg-white/20 backdrop-blur-sm hover:bg-white/30 rounded-lg p-4 transition-colors"
+            >
+              <TrendingUp className="w-6 h-6 mb-2 mx-auto" />
+              <p className="text-sm font-medium">Promotion</p>
+              <p className="text-xs opacity-80 mt-1">Manage semesters</p>
             </button>
           </div>
         </div>
       </main>
+
+      {/* Confirm Dialog */}
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        onClose={() => setConfirmDialog({...confirmDialog, isOpen: false})}
+        onConfirm={confirmDialog.onConfirm}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        type={confirmDialog.type}
+        confirmText={confirmDialog.type === 'danger' ? 'Reject' : 'Approve'}
+      />
     </div>
   );
 }
