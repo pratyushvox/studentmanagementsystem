@@ -4,14 +4,15 @@ import Submission from "../../models/Submission";
 import Assignment from "../../models/Assignment";
 import Student from "../../models/Student";
 
-// Submit assignment
+// Submit assignment  
+
 export const submitAssignment = async (req: Request, res: Response) => {
   try {
     if (!req.user) {
       return res.status(401).json({ message: "User not authenticated" });
     }
 
-    const { assignmentId } = req.body;
+    const { assignmentId } = req.body; 
 
     if (!req.file) {
       return res.status(400).json({ message: "No file uploaded" });
@@ -27,7 +28,9 @@ export const submitAssignment = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "Assignment not found" });
     }
 
-    // Check if student's group is in assignment's groups
+    
+
+    // Check if student's group is in assignment's groups 
     const hasAccess = assignment.groups.some(
       g => g.toString() === student.groupId?.toString()
     );
@@ -53,6 +56,8 @@ export const submitAssignment = async (req: Request, res: Response) => {
       });
     }
 
+    
+
     const fileUrl = await uploadFileToCloudinary(
       req.file.path, 
       "student_submissions"
@@ -68,6 +73,8 @@ export const submitAssignment = async (req: Request, res: Response) => {
       status: isLate ? "late" : "pending"
     });
 
+    
+
     await submission.populate("assignmentId", "title description deadline maxMarks type");
 
     res.status(201).json({
@@ -81,7 +88,7 @@ export const submitAssignment = async (req: Request, res: Response) => {
   }
 };
 
-// Get student's own submissions
+// Get student's own submissions 
 export const getMySubmissions = async (req: Request, res: Response) => {
   try {
     if (!req.user) {
@@ -130,7 +137,8 @@ export const getMySubmissions = async (req: Request, res: Response) => {
   }
 };
 
-// Get submission by ID
+
+// Get submission by ID 
 export const getSubmissionById = async (req: Request, res: Response) => {
   try {
     if (!req.user) {
@@ -143,7 +151,7 @@ export const getSubmissionById = async (req: Request, res: Response) => {
     }
 
     const { submissionId } = req.params;
-    const submission = await Submission.findOne({
+    const submission = await Submission.findOne({ 
       _id: submissionId,
       studentId: student._id
     })

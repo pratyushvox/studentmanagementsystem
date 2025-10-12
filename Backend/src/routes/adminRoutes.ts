@@ -1,8 +1,5 @@
-// routes/adminRoutes.ts
 import express from "express";
 import { protect, adminOnly } from "../middleware/authMiddleware";
-
-
 
 // Dashboard
 import { getDashboardStats } from "../controllers/Admin/adminDashboardController";
@@ -58,7 +55,14 @@ import {
   createStudent,
   createTeacher,
   approveStudent,
-} from "../controllers/authController";
+   getAllUsers,
+  getUserById,
+  updateUser,
+  deleteUser,
+} from "../controllers/Admin/Adminusercontroller";
+
+
+
 
 const router = express.Router();
 
@@ -72,7 +76,15 @@ router.get("/dashboard", protect, adminOnly, getDashboardStats);
 ============================================================ */
 router.post("/create-student", protect, adminOnly, createStudent);
 router.post("/create-teacher", protect, adminOnly, createTeacher);
-router.patch("/approve-student/:studentId", protect, adminOnly, approveStudent);
+router.patch("/users/:id/approve", protect, adminOnly, approveStudent);
+
+/* ============================================================
+ 👤 USER MANAGEMENT
+============================================================ */
+router.get("/users", protect, adminOnly, getAllUsers);          
+router.get("/users/:id", protect, adminOnly, getUserById);      
+router.put("/users/:id", protect, adminOnly, updateUser);       
+router.delete("/users/:id", protect, adminOnly, deleteUser);    
 
 /* ============================================================
  📚 SUBJECT MANAGEMENT
