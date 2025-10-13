@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+// src/pages/Admin/Admindashboard.tsx (REFACTORED)
+import { useState } from "react";
 import { 
   Users, 
   GraduationCap, 
@@ -13,7 +14,6 @@ import {
   BarChart3,
   PieChart,
   Calendar,
-  Download,
   BookMarked,
   UsersRound,
   UserX,
@@ -27,21 +27,12 @@ import { LoadingSpinner, ErrorDisplay } from "../../components/Loadingerror";
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
-
-// API Base URL
-const API_BASE_URL = "http://localhost:5000/api";
+// Import the hooks and utilities
+import { useApiGet, useApiPatch, useApiDelete } from "../../hooks/useApi";
+import { formatDate } from "../../utils/dateHelpers";
 
 export default function AdminDashboard() {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [stats, setStats] = useState<any>(null);
-  const [recentUsers, setRecentUsers] = useState([]);
-  const [recentAssignments, setRecentAssignments] = useState<any[]>([]);
-  const [semesterStats, setSemesterStats] = useState<any[]>([]);
-  const [pendingStudents, setPendingStudents] = useState<any[]>([]);
   const [activeItem, setActiveItem] = useState("dashboard");
-  
-  // Confirm Dialog State
   const [confirmDialog, setConfirmDialog] = useState({
     isOpen: false,
     type: 'info' as 'danger' | 'warning' | 'info',
@@ -50,60 +41,59 @@ export default function AdminDashboard() {
     onConfirm: () => {}
   });
 
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
+  // Fetch all data using useApiGet hook
+  const { 
+    data: stats, 
+    loading: statsLoading, 
+    error: statsError, 
+    refetch: refetchStats 
+  } = useApiGet('/admin/dashboard', { autoFetch: true });
 
-  const fetchDashboardData = async () => {
-    try {
-      setLoading(true);
-      const token = localStorage.getItem("token");
+  const { 
+    data: assignmentsData, 
+    loading: assignmentsLoading 
+  } = useApiGet('/admin/assignments', { autoFetch: true });
 
-      // Fetch dashboard stats
-      const statsRes = await fetch(`${API_BASE_URL}/admin/dashboard`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const statsData = await statsRes.json();
+  const { 
+    data: semesterData, 
+    loading: semesterLoading 
+  } = useApiGet('/admin/semester-stats', { autoFetch: true });
 
-      // Fetch recent assignments
-      const assignmentsRes = await fetch(`${API_BASE_URL}/admin/assignments`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const assignmentsData = await assignmentsRes.json();
+  const { 
+    data: usersData 
+  } = useApiGet('/admin/users', { autoFetch: true });
 
-      // Fetch semester statistics
-      const semesterRes = await fetch(`${API_BASE_URL}/admin/semester-stats`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const semesterData = await semesterRes.json();
-
-      // Fetch pending students
-      try {
-        const usersRes = await fetch(`${API_BASE_URL}/admin/users`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        const usersData = await usersRes.json();
-        const pending = usersData.filter((user: any) => 
-          user.role === 'student' && !user.isApproved
-        );
-        setPendingStudents(pending);
-      } catch (err) {
-        console.log("Couldn't fetch users, skipping pending students");
-        setPendingStudents([]);
-      }
-
-      setStats(statsData);
-      setRecentAssignments(assignmentsData.slice(0, 6));
-      setSemesterStats(semesterData);
-      setError(null);
-    } catch (err: any) {
-      setError(err.message);
-      console.error("Error fetching dashboard data:", err);
-    } finally {
-      setLoading(false);
+  // API mutation hooks
+  const { patch: approvePatch } = useApiPatch({
+    onSuccess: () => {
+      toast.success("Student approved successfully!");
+      refetchStats();
+    },
+    onError: (error) => {
+      toast.error(`Failed to approve: ${error}`);
     }
-  };
+  });
 
+  const { delete: removeStudent } = useApiDelete({
+    onSuccess: () => {
+      toast.success("Student rejected and removed.");
+      refetchStats();
+    },
+    onError: (error) => {
+      toast.error(`Failed to reject: ${error}`);
+    }
+  });
+
+  // Derived state
+  const recentAssignments = assignmentsData?.slice(0, 6) || [];
+  const semesterStats = semesterData || [];
+  
+  // Filter pending students
+  const pendingStudents = usersData?.filter((user: any) => 
+    user.role === 'student' && !user.isApproved
+  ) || [];
+
+  // Handle approve student
   const handleApproveStudent = async (studentId: string, studentName: string) => {
     setConfirmDialog({
       isOpen: true,
@@ -111,34 +101,12 @@ export default function AdminDashboard() {
       title: 'Approve Student',
       message: `Are you sure you want to approve <strong>${studentName}</strong>?<br/>They will be able to access the platform.`,
       onConfirm: async () => {
-        try {
-          const token = localStorage.getItem("token");
-          const res = await fetch(`${API_BASE_URL}/admin/users/${studentId}/approve`, {
-            method: 'PATCH',
-            headers: { Authorization: `Bearer ${token}` }
-          });
-          
-          if (!res.ok) {
-            const errorData = await res.json();
-            throw new Error(errorData.message || 'Failed to approve student');
-          }
-          
-          fetchDashboardData(); // Refresh data
-          toast.success(`${studentName} approved successfully!`, {
-            position: "top-right",
-            autoClose: 3000,
-          });
-        } catch (error: any) {
-          console.error("Error approving student:", error);
-          toast.error(error.message || "Failed to approve student", {
-            position: "top-right",
-            autoClose: 3000,
-          });
-        }
+        await approvePatch(`/admin/users/${studentId}/approve`);
       }
     });
   };
 
+  // Handle reject student
   const handleRejectStudent = async (studentId: string, studentName: string) => {
     setConfirmDialog({
       isOpen: true,
@@ -146,35 +114,8 @@ export default function AdminDashboard() {
       title: 'Reject Student',
       message: `Are you sure you want to reject <strong>${studentName}</strong>?<br/>Their account will be deleted.`,
       onConfirm: async () => {
-        try {
-          const token = localStorage.getItem("token");
-          const res = await fetch(`${API_BASE_URL}/admin/users/${studentId}`, {
-            method: 'DELETE',
-            headers: { Authorization: `Bearer ${token}` }
-          });
-          if (res.ok) {
-            fetchDashboardData(); // Refresh data
-            toast.success(`${studentName} rejected and removed.`, {
-              position: "top-right",
-              autoClose: 3000,
-            });
-          }
-        } catch (error) {
-          console.error("Error rejecting student:", error);
-          toast.error("Failed to reject student", {
-            position: "top-right",
-            autoClose: 3000,
-          });
-        }
+        await removeStudent(`/admin/users/${studentId}`);
       }
-    });
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
     });
   };
 
@@ -193,22 +134,22 @@ export default function AdminDashboard() {
       : <span className="flex items-center gap-1 text-xs text-orange-600"><Clock className="w-3 h-3" /> Pending</span>;
   };
 
-  if (loading) {
+  // Loading state
+  const isLoading = statsLoading || assignmentsLoading || semesterLoading;
+
+  if (isLoading) {
     return <LoadingSpinner message="Loading admin dashboard..." />;
   }
 
-  if (error) {
-    return <ErrorDisplay error={error} onRetry={fetchDashboardData} title="Error Loading Dashboard" />;
+  if (statsError) {
+    return <ErrorDisplay error={statsError} onRetry={refetchStats} title="Error Loading Dashboard" />;
   }
 
   if (!stats) return null;
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Navbar onProfileClick={function (): void {
-        throw new Error("Function not implemented.");
-      }} />
-
+      <Navbar />
       <Sidebar activeItem={activeItem} onItemClick={setActiveItem} userRole="admin" />
      
       <main className="lg:ml-64 p-6 lg:p-8 space-y-6">
@@ -220,7 +161,6 @@ export default function AdminDashboard() {
               Manage your educational platform - Semester System
             </p>
           </div>
-          
         </div>
 
         {/* Key Metrics Grid */}
@@ -234,8 +174,7 @@ export default function AdminDashboard() {
               <TrendingUp className="w-5 h-5 opacity-80" />
             </div>
             <h3 className="text-sm font-medium opacity-90 mb-1">Total Students</h3>
-            
-            <p className="text-3xl font-bold">{stats.totalStudents || 0}</p>
+            <p className="text-3xl font-bold">{stats?.totalStudents || 0}</p>
             <p className="text-xs opacity-80 mt-2">Active learners</p>
           </div>
 
@@ -248,7 +187,7 @@ export default function AdminDashboard() {
               <BarChart3 className="w-5 h-5 opacity-80" />
             </div>
             <h3 className="text-sm font-medium opacity-90 mb-1">Total Teachers</h3>
-            <p className="text-3xl font-bold">{stats.totalTeachers || 0}</p>
+            <p className="text-3xl font-bold">{stats?.totalTeachers || 0}</p>
             <p className="text-xs opacity-80 mt-2">Educators on platform</p>
           </div>
 
@@ -261,7 +200,7 @@ export default function AdminDashboard() {
               <PieChart className="w-5 h-5 opacity-80" />
             </div>
             <h3 className="text-sm font-medium opacity-90 mb-1">Total Subjects</h3>
-            <p className="text-3xl font-bold">{stats.totalSubjects || 0}</p>
+            <p className="text-3xl font-bold">{stats?.totalSubjects || 0}</p>
             <p className="text-xs opacity-80 mt-2">Across all semesters</p>
           </div>
 
@@ -274,12 +213,12 @@ export default function AdminDashboard() {
               <AlertCircle className="w-5 h-5 opacity-80" />
             </div>
             <h3 className="text-sm font-medium opacity-90 mb-1">Total Groups</h3>
-            <p className="text-3xl font-bold">{stats.totalGroups || 0}</p>
+            <p className="text-3xl font-bold">{stats?.totalGroups || 0}</p>
             <p className="text-xs opacity-80 mt-2">Student groups</p>
           </div>
         </div>
 
-        {/* Secondary Stats - USING StatsCard Component */}
+        {/* Secondary Stats */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <StatsCard
             title="Pending Approvals"
@@ -292,7 +231,7 @@ export default function AdminDashboard() {
           
           <StatsCard
             title="Active Students"
-            count={stats.totalStudents || 0}
+            count={stats?.totalStudents || 0}
             subtitle="enrolled students"
             icon={Users}
             iconColor="text-green-600"
@@ -301,7 +240,7 @@ export default function AdminDashboard() {
           
           <StatsCard
             title="Learning Posts"
-            count={stats.totalPosts || 0}
+            count={stats?.totalPosts || 0}
             subtitle="posts published"
             icon={BookOpen}
             iconColor="text-purple-600"
@@ -309,9 +248,8 @@ export default function AdminDashboard() {
           />
         </div>
 
-        {/* Pending Student Approvals & Recent Activity */}
+        {/* Pending Student Approvals */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Pending Student Approvals */}
           <div className="bg-white rounded-xl shadow-md border border-gray-100">
             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -380,7 +318,7 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          {/* Recent Activity / System Stats */}
+          {/* Recent Activity */}
           <div className="bg-white rounded-xl shadow-md border border-gray-100">
             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
               <h2 className="text-lg font-bold text-gray-900">System Activity</h2>
@@ -399,7 +337,7 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                   <p className="text-2xl font-bold text-blue-600">
-                    {(stats.totalStudents || 0) + (stats.totalTeachers || 0)}
+                    {(stats?.totalStudents || 0) + (stats?.totalTeachers || 0)}
                   </p>
                 </div>
 
@@ -429,7 +367,7 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                   <p className="text-2xl font-bold text-emerald-600">
-                    {stats.totalTeachers || 0}
+                    {stats?.totalTeachers || 0}
                   </p>
                 </div>
 
@@ -444,7 +382,7 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                   <p className="text-2xl font-bold text-orange-600">
-                    {stats.totalGroups || 0}
+                    {stats?.totalGroups || 0}
                   </p>
                 </div>
               </div>
@@ -463,7 +401,7 @@ export default function AdminDashboard() {
               <p className="text-center text-gray-500 py-8">No semester data available</p>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {semesterStats.map((sem) => (
+                {semesterStats.map((sem: any) => (
                   <div key={sem.semester} className="border border-gray-200 rounded-lg p-4 hover:border-blue-300 hover:shadow-md transition-all">
                     <div className="flex items-center justify-between mb-3">
                       <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -505,7 +443,7 @@ export default function AdminDashboard() {
               <p className="text-center text-gray-500 py-8">No assignments found</p>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {recentAssignments.map((assignment) => (
+                {recentAssignments.map((assignment: any) => (
                   <div key={assignment._id} className="border border-gray-200 rounded-lg p-4 hover:border-blue-300 hover:shadow-md transition-all">
                     <div className="flex items-start justify-between mb-3">
                       <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -545,7 +483,7 @@ export default function AdminDashboard() {
             >
               <BookMarked className="w-6 h-6 mb-2 mx-auto" />
               <p className="text-sm font-medium">Subjects</p>
-              <p className="text-xs opacity-80 mt-1">{stats.totalSubjects || 0} total</p>
+              <p className="text-xs opacity-80 mt-1">{stats?.totalSubjects || 0} total</p>
             </button>
             <button 
               onClick={() => window.location.href = '/admin/groups'}
@@ -553,7 +491,7 @@ export default function AdminDashboard() {
             >
               <UsersRound className="w-6 h-6 mb-2 mx-auto" />
               <p className="text-sm font-medium">Groups</p>
-              <p className="text-xs opacity-80 mt-1">{stats.totalGroups || 0} total</p>
+              <p className="text-xs opacity-80 mt-1">{stats?.totalGroups || 0} total</p>
             </button>
             <button 
               onClick={() => window.location.href = '/admin/users'}

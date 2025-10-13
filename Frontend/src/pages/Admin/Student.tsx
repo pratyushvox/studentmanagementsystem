@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type SetStateAction } from "react";
 import { 
   Users, 
   Search, 
@@ -7,13 +7,17 @@ import {
   Mail, 
   GraduationCap,
   CheckCircle,
-  XCircle
+  XCircle,
+  UsersRound,
+  BookOpen,
+  Wand2,
+  AlertCircle
 } from "lucide-react";
 import Navbar from "../../components/Navbar";
 import Sidebar from "../../components/Sidebar";
 import DataTable, { type Column, type Action } from "../../components/Table";
 import ConfirmDialog from "../../components/Confirmationdialogue";
-import UserFormModal from "../../components/UserFormModal";
+import UserFormModal from "../../components/Userformmodal";
 import StatsCard from "../../components/Cardstats";
 import { LoadingSpinner, ErrorDisplay } from "../../components/Loadingerror";
 import { toast } from 'react-toastify';
@@ -26,12 +30,17 @@ export default function AdminStudents() {
   const [error, setError] = useState(null);
   const [students, setStudents] = useState([]);
   const [filteredStudents, setFilteredStudents] = useState([]);
+  const [groups, setGroups] = useState([]);
   const [activeItem, setActiveItem] = useState("students");
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterGrade, setFilterGrade] = useState("all");
+  const [filterSemester, setFilterSemester] = useState("all");
+  const [filterStatus, setFilterStatus] = useState("all");
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showAssignGroupModal, setShowAssignGroupModal] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState(null);
+  const [autoAssignLoading, setAutoAssignLoading] = useState(false);
+
   
   const [confirmDialog, setConfirmDialog] = useState({
     isOpen: false,
@@ -45,7 +54,13 @@ export default function AdminStudents() {
     fullName: "",
     email: "",
     password: "",
-    grade: ""
+    semester: "1",
+    enrollmentYear: new Date().getFullYear().toString()
+  });
+
+  const [assignGroupData, setAssignGroupData] = useState({
+    studentId: "",
+    groupId: ""
   });
 
   // Define form fields for student
@@ -72,16 +87,27 @@ export default function AdminStudents() {
       required: true
     },
     {
-      name: "grade",
-      label: "Grade",
+      name: "semester",
+      label: "Semester",
       type: "select" as const,
       required: true,
       options: [
-        { value: "9", label: "Grade 9" },
-        { value: "10", label: "Grade 10" },
-        { value: "11", label: "Grade 11" },
-        { value: "12", label: "Grade 12" }
+        { value: "1", label: "Semester 1" },
+        { value: "2", label: "Semester 2" },
+        { value: "3", label: "Semester 3" },
+        { value: "4", label: "Semester 4" },
+        { value: "5", label: "Semester 5" },
+        { value: "6", label: "Semester 6" },
+        { value: "7", label: "Semester 7" },
+        { value: "8", label: "Semester 8" }
       ]
+    },
+    {
+      name: "enrollmentYear",
+      label: "Enrollment Year",
+      type: "text" as const,
+      placeholder: "2024",
+      required: true
     }
   ];
 
@@ -97,49 +123,33 @@ export default function AdminStudents() {
       label: "Email",
       type: "email" as const,
       required: true
-    },
-    {
-      name: "grade",
-      label: "Grade",
-      type: "select" as const,
-      required: true,
-      options: [
-        { value: "9", label: "Grade 9" },
-        { value: "10", label: "Grade 10" },
-        { value: "11", label: "Grade 11" },
-        { value: "12", label: "Grade 12" }
-      ]
-    },
-    {
-      name: "isApproved",
-      label: "Approval Status",
-      type: "select" as const,
-      required: true,
-      options: [
-        { value: "false", label: "Pending" },
-        { value: "true", label: "Approved" }
-      ]
     }
   ];
 
   useEffect(() => {
     fetchStudents();
+    fetchGroups();
   }, []);
 
   useEffect(() => {
     filterStudents();
-  }, [students, searchTerm, filterGrade]);
+  }, [students, searchTerm, filterSemester, filterStatus]);
 
   const fetchStudents = async () => {
     try {
       setLoading(true);
       const token = localStorage.getItem("token");
-      const response = await fetch(`${API_BASE_URL}/admin/users`, {
+      
+      // Fetch User documents
+      const usersRes = await fetch(`${API_BASE_URL}/admin/users`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      const data = await response.json();
+      const users = await usersRes.json();
       
-      const studentsOnly = data.filter(user => user.role === "student");
+      // For now, we'll work with User data
+      // In full implementation, you'd fetch Student profiles too
+      const studentsOnly = users.filter((user: { role: string; }) => user.role === "student");
+      
       setStudents(studentsOnly);
       setFilteredStudents(studentsOnly);
       setError(null);
@@ -148,6 +158,21 @@ export default function AdminStudents() {
       console.error("Error fetching students:", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+
+
+  const fetchGroups = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_BASE_URL}/admin/groups`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      setGroups(data);
+    } catch (err) {
+      console.error("Error fetching groups:", err);
     }
   };
 
@@ -161,14 +186,77 @@ export default function AdminStudents() {
       );
     }
 
-    if (filterGrade !== "all") {
-      filtered = filtered.filter(student => student.grade === filterGrade);
+    if (filterSemester !== "all") {
+      // Note: This will work once Student profiles are implemented
+      filtered = filtered.filter(student => 
+        student.semester?.toString() === filterSemester
+      );
+    }
+
+    if (filterStatus !== "all") {
+      if (filterStatus === "approved") {
+        filtered = filtered.filter(s => s.isApproved);
+      } else if (filterStatus === "pending") {
+        filtered = filtered.filter(s => !s.isApproved);
+      }
     }
 
     setFilteredStudents(filtered);
   };
 
-  const handleAddStudent = async (e) => {
+  const handleAutoAssignGroups = async () => {
+  if (!confirm("🤖 This will automatically assign all unassigned students to groups using Round-Robin distribution.\n\nStudents will be evenly distributed across available groups in their semester.\n\nContinue?")) {
+    return;
+  }
+
+  try {
+    setAutoAssignLoading(true);
+    const token = localStorage.getItem("token");
+    
+    const response = await fetch(`${API_BASE_URL}/admin/groups/auto-assign-students`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      }
+    });
+
+    const data = await response.json();
+
+    if (response.ok && data.success) {
+      // Show detailed success message
+      let message = ` Successfully assigned ${data.assigned} students!`;
+      
+      if (data.skipped > 0) {
+        message += `\n\n Skipped ${data.skipped} students (no available groups or groups are full)`;
+      }
+
+      // Show details per semester
+      if (data.details && data.details.length > 0) {
+        message += '\n\n Details:';
+        data.details.forEach((detail: any) => {
+          message += `\n• Semester ${detail.semester}: ${detail.assigned} assigned, ${detail.skipped} skipped`;
+        });
+      }
+
+      alert(message);
+      toast.success(`Assigned ${data.assigned} students using Round-Robin algorithm!`);
+      
+      // Refresh students list
+      fetchStudents();
+    } else {
+      toast.error(data.message || "Failed to auto-assign students");
+    }
+  } catch (err: any) {
+    console.error("Auto-assign error:", err);
+    toast.error("Error during auto-assignment: " + err.message);
+  } finally {
+    setAutoAssignLoading(false);
+  }
+};
+
+
+  const handleAddStudent = async (e: { preventDefault: () => void; }) => {
     e.preventDefault();
     try {
       const token = localStorage.getItem("token");
@@ -178,7 +266,11 @@ export default function AdminStudents() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify(newStudent)
+        body: JSON.stringify({
+          ...newStudent,
+          semester: parseInt(newStudent.semester),
+          enrollmentYear: parseInt(newStudent.enrollmentYear)
+        })
       });
 
       if (response.ok) {
@@ -188,7 +280,8 @@ export default function AdminStudents() {
           fullName: "",
           email: "",
           password: "",
-          grade: ""
+          semester: "1",
+          enrollmentYear: new Date().getFullYear().toString()
         });
         fetchStudents();
       } else {
@@ -200,16 +293,10 @@ export default function AdminStudents() {
     }
   };
 
-  const handleEditStudent = async (e) => {
+  const handleEditStudent = async (e: { preventDefault: () => void; }) => {
     e.preventDefault();
     try {
       const token = localStorage.getItem("token");
-      
-      // Convert isApproved string to boolean
-      const updateData = {
-        ...selectedStudent,
-        isApproved: selectedStudent.isApproved === "true" || selectedStudent.isApproved === true
-      };
       
       const response = await fetch(`${API_BASE_URL}/admin/users/${selectedStudent._id}`, {
         method: "PUT",
@@ -217,7 +304,10 @@ export default function AdminStudents() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify(updateData)
+        body: JSON.stringify({
+          fullName: selectedStudent.fullName,
+          email: selectedStudent.email
+        })
       });
 
       if (response.ok) {
@@ -234,10 +324,37 @@ export default function AdminStudents() {
     }
   };
 
-  const handleApproveStudent = async (student) => {
+  const handleAssignGroup = async (e: { preventDefault: () => void; }) => {
+    e.preventDefault();
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch(`${API_BASE_URL}/admin/approve-student/${student._id}`, {
+      const response = await fetch(`${API_BASE_URL}/admin/groups/assign-student`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(assignGroupData)
+      });
+
+      if (response.ok) {
+        toast.success("Student assigned to group successfully!");
+        setShowAssignGroupModal(false);
+        setAssignGroupData({ studentId: "", groupId: "" });
+        fetchStudents();
+      } else {
+        const data = await response.json();
+        toast.error(data.message || "Failed to assign group");
+      }
+    } catch (err) {
+      toast.error("Error assigning group: " + err.message);
+    }
+  };
+
+  const handleApproveStudent = async (student: { _id: any; fullName: any; }) => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(`${API_BASE_URL}/admin/users/${student._id}/approve`, {
         method: "PATCH",
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -254,7 +371,7 @@ export default function AdminStudents() {
     }
   };
 
-  const handleDeleteStudent = async (student) => {
+  const handleDeleteStudent = async (student: { _id: any; }) => {
     try {
       const token = localStorage.getItem("token");
       const response = await fetch(`${API_BASE_URL}/admin/users/${student._id}`, {
@@ -274,15 +391,20 @@ export default function AdminStudents() {
     }
   };
 
-  const openEditModal = (student) => {
-    setSelectedStudent({
-      ...student,
-      isApproved: student.isApproved ? "true" : "false"
-    });
+  const openEditModal = (student: SetStateAction<null>) => {
+    setSelectedStudent(student);
     setShowEditModal(true);
   };
 
-  const openApproveConfirm = (student) => {
+  const openAssignGroupModal = (student: { _id: any; }) => {
+    setAssignGroupData({
+      studentId: student._id,
+      groupId: ""
+    });
+    setShowAssignGroupModal(true);
+  };
+
+  const openApproveConfirm = (student: { fullName: any; }) => {
     setConfirmDialog({
       isOpen: true,
       type: "info",
@@ -292,7 +414,7 @@ export default function AdminStudents() {
     });
   };
 
-  const openDeleteConfirm = (student) => {
+  const openDeleteConfirm = (student: { fullName: any; }) => {
     setConfirmDialog({
       isOpen: true,
       type: "danger",
@@ -315,6 +437,9 @@ export default function AdminStudents() {
             <div className="text-sm font-medium text-gray-900">
               {row.fullName}
             </div>
+            <div className="text-xs text-gray-500">
+              {row.studentId || "ID pending"}
+            </div>
           </div>
         </div>
       ),
@@ -332,35 +457,39 @@ export default function AdminStudents() {
       className: "whitespace-nowrap"
     },
     {
-      header: "Grade",
-      accessor: "grade",
+      header: "Semester",
+      accessor: "semester",
       cell: (row) => (
-        <div className="flex items-center gap-2 text-sm text-gray-900">
-          <GraduationCap className="w-4 h-4" />
-          Grade {row.grade || "N/A"}
+        <div className="flex items-center gap-2">
+          <GraduationCap className="w-4 h-4 text-blue-600" />
+          <span className="text-sm font-medium text-gray-900">
+            {row.semester ? `Semester ${row.semester}` : "Not assigned"}
+          </span>
         </div>
       ),
       className: "whitespace-nowrap"
     },
     {
-      header: "Subjects",
-      accessor: "assignedSubjects",
+      header: "Group",
+      accessor: "groupId",
       cell: (row) => (
-        <div className="flex flex-wrap gap-1">
-          {row.assignedSubjects?.length > 0 ? (
-            row.assignedSubjects.map((subject, idx) => (
-              <span
-                key={idx}
-                className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs"
-              >
-                {subject}
-              </span>
-            ))
-          ) : (
-            <span className="text-sm text-gray-500">No subjects</span>
-          )}
-        </div>
-      )
+        row.groupId ? (
+          <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-medium">
+            {row.groupName || "Group assigned"}
+          </span>
+        ) : (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              openAssignGroupModal(row);
+            }}
+            className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs font-medium hover:bg-gray-200 transition-colors"
+          >
+            Assign Group
+          </button>
+        )
+      ),
+      className: "whitespace-nowrap"
     },
     {
       header: "Status",
@@ -395,6 +524,11 @@ export default function AdminStudents() {
       onClick: openEditModal
     },
     {
+      icon: "users",
+      label: "Assign Group",
+      onClick: openAssignGroupModal
+    },
+    {
       icon: "delete",
       label: "Delete Student",
       onClick: openDeleteConfirm
@@ -411,7 +545,7 @@ export default function AdminStudents() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Navbar onProfileClick={() => {}} />
+     <Navbar />
       <Sidebar activeItem={activeItem} onItemClick={setActiveItem} userRole="admin" />
      
       <main className="lg:ml-64 p-6 lg:p-8">
@@ -420,7 +554,7 @@ export default function AdminStudents() {
             <div>
               <h1 className="text-2xl font-semibold text-gray-900">Students Management</h1>
               <p className="text-gray-600 text-sm mt-1">
-                Manage all students in the system
+                Manage all students in the semester system
               </p>
             </div>
             <button
@@ -432,7 +566,7 @@ export default function AdminStudents() {
             </button>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
             <StatsCard
               title="Total Students"
               count={students.length}
@@ -445,7 +579,7 @@ export default function AdminStudents() {
             <StatsCard
               title="Approved Students"
               count={students.filter(s => s.isApproved).length}
-              subtitle="approved students"
+              subtitle="can access system"
               icon={CheckCircle}
               iconColor="text-green-600"
               iconBg="bg-green-100"
@@ -454,15 +588,78 @@ export default function AdminStudents() {
             <StatsCard
               title="Pending Approval"
               count={students.filter(s => !s.isApproved).length}
-              subtitle="pending students"
+              subtitle="awaiting approval"
               icon={XCircle}
               iconColor="text-orange-600"
               iconBg="bg-orange-100"
             />
+
+            <StatsCard
+              title="Unassigned"
+              count={students.filter(s => !s.groupId).length}
+              subtitle="no group assigned"
+              icon={UsersRound}
+              iconColor="text-purple-600"
+              iconBg="bg-purple-100"
+            />
           </div>
 
+          <div className="bg-gradient-to-r from-purple-500 via-purple-600 to-blue-600 rounded-xl shadow-lg p-6 text-white mb-6">
+  <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+    <div className="flex-1">
+      <div className="flex items-center gap-3 mb-3">
+        <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center backdrop-blur-sm">
+          <Wand2 className="w-6 h-6" />
+        </div>
+        <div>
+          <h3 className="text-xl font-bold">Auto-Assign Groups (Round-Robin)</h3>
+          <p className="text-sm text-white/90">Evenly distribute students across available groups</p>
+        </div>
+      </div>
+      
+      <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 space-y-2">
+        <div className="flex items-start gap-2 text-sm">
+          <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="font-semibold mb-1">How Round-Robin Works:</p>
+            <ul className="list-disc list-inside space-y-1 ml-2 text-white/90">
+              <li>Groups students by their semester</li>
+              <li>Distributes students one-by-one to each group in rotation</li>
+              <li>Result: Equal distribution (e.g., 100 students → 5 groups = 20 each)</li>
+              <li>Respects group capacity limits</li>
+            </ul>
+          </div>
+        </div>
+        
+        {students.filter(s => !s.groupId).length > 0 && (
+          <div className="flex items-center gap-2 text-sm bg-white/10 rounded px-3 py-2 mt-2">
+            <Users className="w-4 h-4" />
+            <span className="font-semibold">{students.filter(s => !s.groupId).length} students</span>
+            <span className="text-white/80">waiting to be assigned</span>
+          </div>
+        )}
+      </div>
+    </div>
+    
+    <button
+      onClick={handleAutoAssignGroups}
+      disabled={autoAssignLoading || students.filter(s => !s.groupId).length === 0}
+      className="flex items-center gap-3 px-8 py-4 bg-white text-purple-600 rounded-lg hover:bg-gray-100 transition-all font-bold text-lg shadow-lg disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap transform hover:scale-105"
+    >
+      <Wand2 className="w-6 h-6" />
+      {autoAssignLoading ? (
+        <>
+          <span className="animate-pulse">Assigning...</span>
+        </>
+      ) : (
+        <>Auto-Assign All</>
+      )}
+    </button>
+  </div>
+</div>
+
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
@@ -477,15 +674,27 @@ export default function AdminStudents() {
               <div className="relative">
                 <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <select
-                  value={filterGrade}
-                  onChange={(e) => setFilterGrade(e.target.value)}
+                  value={filterSemester}
+                  onChange={(e) => setFilterSemester(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none"
                 >
-                  <option value="all">All Grades</option>
-                  <option value="9">Grade 9</option>
-                  <option value="10">Grade 10</option>
-                  <option value="11">Grade 11</option>
-                  <option value="12">Grade 12</option>
+                  <option value="all">All Semesters</option>
+                  {[1,2,3,4,5,6,7,8].map(sem => (
+                    <option key={sem} value={sem.toString()}>Semester {sem}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="relative">
+                <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <select
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none"
+                >
+                  <option value="all">All Status</option>
+                  <option value="approved">Approved</option>
+                  <option value="pending">Pending</option>
                 </select>
               </div>
 
@@ -535,6 +744,50 @@ export default function AdminStudents() {
         fields={studentEditFields}
         submitButtonText="Update Student"
       />
+
+      {/* Assign Group Modal */}
+      {showAssignGroupModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full p-6">
+            <h2 className="text-xl font-bold mb-4">Assign Student to Group</h2>
+            <form onSubmit={handleAssignGroup} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Select Group *
+                </label>
+                <select
+                  value={assignGroupData.groupId}
+                  onChange={(e) => setAssignGroupData({...assignGroupData, groupId: e.target.value})}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Choose a group...</option>
+                  {groups.map(group => (
+                    <option key={group._id} value={group._id}>
+                      {group.name} - Semester {group.semester} ({group.studentCount}/{group.capacity})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex gap-3 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowAssignGroupModal(false)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  Assign Group
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

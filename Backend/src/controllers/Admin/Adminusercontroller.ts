@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import bcrypt from "bcrypt"; 
 import User from "../../models/User";
 import Student from "../../models/Student";
 import Teacher from "../../models/Teacher"; // If you have this

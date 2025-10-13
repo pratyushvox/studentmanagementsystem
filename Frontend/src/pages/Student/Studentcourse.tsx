@@ -191,7 +191,7 @@ export default function StudentCoursesPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Navbar onProfileClick={() => {}} />
+     <Navbar />
       <Sidebar activeItem={activeItem} onItemClick={setActiveItem} userRole="student" />
 
       <main className="lg:ml-64 p-6 lg:p-8 space-y-6 mt-10">

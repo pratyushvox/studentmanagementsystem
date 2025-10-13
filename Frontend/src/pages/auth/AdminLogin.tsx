@@ -32,7 +32,7 @@ export default function AdminLogin() {
 
       if (!response.ok) {
         if (response.status === 404) {
-          toast.error('Admin not found. Please check your email.');
+          toast.error('User not found. Please check your email.');
         } else if (response.status === 401) {
           toast.error('Invalid credentials. Please try again.');
         } else {
@@ -42,8 +42,8 @@ export default function AdminLogin() {
         return;
       }
 
-      // Check if the logged-in user is actually an admin
-      if (data.role !== 'admin') {
+      // ✅ FIXED: Check role from data.user.role (not data.role)
+      if (data.user.role !== 'admin') {
         toast.error('Access denied. This portal is for admins only.');
         setIsLoading(false);
         return;
@@ -51,8 +51,8 @@ export default function AdminLogin() {
 
       // Store token and user info
       localStorage.setItem('token', data.token);
-      localStorage.setItem('role', data.role);
-      localStorage.setItem('fullName', data.fullName);
+      localStorage.setItem('role', data.user.role);
+      localStorage.setItem('user', JSON.stringify(data.user));
 
       toast.success('Admin login successful!');
 

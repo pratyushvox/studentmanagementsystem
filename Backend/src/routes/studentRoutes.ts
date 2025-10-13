@@ -1,6 +1,15 @@
+// routes/studentRoutes.ts
 import express from "express";
 import { protect } from "../middleware/authMiddleware";
 import { upload } from "../middleware/uploadMiddleware";
+
+// Profile Management
+import { 
+  completeProfile, 
+  getStudentProfile, 
+  updateStudentProfile,
+  checkProfileStatus
+} from "../controllers/Student/Studentprofilecontroller";
 
 // Dashboard
 import { 
@@ -29,15 +38,29 @@ import {
 
 const router = express.Router();
 
-// ============ DASHBOARD ============
+// ============================================================
+// PROFILE MANAGEMENT (First-time setup & updates)
+// ============================================================
+router.post("/complete-profile", protect, completeProfile);
+router.get("/profile", protect, getStudentProfile);
+router.put("/profile", protect, updateStudentProfile);
+router.get("/profile-status", protect, checkProfileStatus);
+
+// ============================================================
+// DASHBOARD
+// ============================================================
 router.get("/dashboard", protect, getStudentDashboard);
 router.get("/academic-history", protect, getAcademicHistory);
 
-// ============ ASSIGNMENTS ============
+// ============================================================
+// ASSIGNMENTS
+// ============================================================
 router.get("/assignments", protect, getAssignmentsForStudent);
 router.get("/assignments/:assignmentId", protect, getAssignmentById);
 
-// ============ SUBMISSIONS ============
+// ============================================================
+// SUBMISSIONS
+// ============================================================
 router.post(
   "/assignments/submit",
   protect,
@@ -47,7 +70,9 @@ router.post(
 router.get("/submissions", protect, getMySubmissions);
 router.get("/submissions/:submissionId", protect, getSubmissionById);
 
-// ============ POSTS ============
+// ============================================================
+// POSTS
+// ============================================================
 router.get("/posts", protect, getPostsForStudent);
 router.get("/posts/:postId", protect, getPostById);
 

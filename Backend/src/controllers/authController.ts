@@ -6,9 +6,10 @@ import Teacher from "../models/Teacher";
 import { generateToken } from "../utils/generateToken";
 import { Request, Response } from "express";
 
+// ============================================================
+// STUDENT REGISTRATION (Self-Registration - Requires Approval)
+// ============================================================
 
-
-// Student Self-Registration (Requires Approval)
 export const registerStudent = async (req: Request, res: Response) => {
   try {
     const { fullName, email, password, enrollmentYear } = req.body;
@@ -26,7 +27,8 @@ export const registerStudent = async (req: Request, res: Response) => {
       email,
       password: hashedPassword,
       role: "student",
-      isApproved: false // Needs admin approval 
+      isApproved: false, // Needs admin approval
+      profileCompleted: false // Will complete after first login
     });
 
     // Generate unique student ID
@@ -34,13 +36,13 @@ export const registerStudent = async (req: Request, res: Response) => {
     const count = await Student.countDocuments();
     const studentId = `STU${year}${String(count + 1).padStart(4, "0")}`;
 
-    // Create Student Profile
+    // Create Student Profile (minimal data - will complete later)
     await Student.create({
       userId: user._id,
       studentId,
-      currentSemester: 1,
       enrollmentYear: enrollmentYear || new Date().getFullYear(),
       status: "active"
+      // currentSemester will be set on first login via profile completion
     });
 
     res.status(201).json({ 
@@ -52,15 +54,10 @@ export const registerStudent = async (req: Request, res: Response) => {
   }
 };
 
-
-
-
-
 // ============================================================
-// LOGIN
+// LOGIN (Admin / Student / Teacher)
 // ============================================================
 
-// Login (Admin / Student / Teacher)
 export const loginUser = async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
@@ -75,6 +72,7 @@ export const loginUser = async (req: Request, res: Response) => {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
+    // Check if student is approved
     if (user.role === "student" && !user.isApproved) {
       return res.status(403).json({ 
         message: "Please wait for admin approval." 
@@ -96,8 +94,14 @@ export const loginUser = async (req: Request, res: Response) => {
 
     res.json({ 
       token, 
-      role: user.role, 
-      fullName: user.fullName,
+      user: {
+        id: user._id,
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role,
+        isApproved: user.isApproved,
+        profileCompleted: user.profileCompleted // Important for frontend routing
+      },
       profile: profileData
     });
   } catch (err: any) {
@@ -106,7 +110,7 @@ export const loginUser = async (req: Request, res: Response) => {
 };
 
 // ============================================================
-// GET PROFILE
+// GET PROFILE (Works for all roles)
 // ============================================================
 
 export const getMyProfile = async (req: Request, res: Response) => {
@@ -143,7 +147,7 @@ export const getMyProfile = async (req: Request, res: Response) => {
 };
 
 // ============================================================
-// UPDATE PROFILE (Students/Teachers can update basic info)
+// UPDATE PROFILE (Basic info: name, email)
 // ============================================================
 
 export const updateMyProfile = async (req: Request, res: Response) => {

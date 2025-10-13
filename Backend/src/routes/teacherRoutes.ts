@@ -78,6 +78,7 @@ router.post(
   "/posts",
   protect,
   teacherOnly,
+  
   upload.single("file"),
   createPost
 );

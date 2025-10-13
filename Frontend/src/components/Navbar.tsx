@@ -1,9 +1,10 @@
+// src/components/Navbar.tsx (FIXED)
 import { useState } from "react";
 import { GraduationCap, LogOut, User, Bell } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 interface NavbarProps {
-  onProfileClick: () => void;
+  onProfileClick?: () => void;
 }
 
 const Navbar: React.FC<NavbarProps> = ({ onProfileClick }) => {
@@ -15,9 +16,21 @@ const Navbar: React.FC<NavbarProps> = ({ onProfileClick }) => {
     localStorage.removeItem("token");
     localStorage.removeItem("role");
     localStorage.removeItem("fullName");
+    localStorage.removeItem("user");
 
     // Redirect to login page
     navigate("/login");
+  };
+
+  const handleEditProfile = () => {
+    // If callback provided, use it
+    if (onProfileClick) {
+      onProfileClick();
+    } else {
+      // Otherwise navigate to profile page
+      navigate("/profile");
+    }
+    setShowProfileMenu(false);
   };
 
   return (
@@ -64,10 +77,7 @@ const Navbar: React.FC<NavbarProps> = ({ onProfileClick }) => {
               {showProfileMenu && (
                 <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1">
                   <button
-                    onClick={() => {
-                      onProfileClick();
-                      setShowProfileMenu(false);
-                    }}
+                    onClick={handleEditProfile}
                     className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
                   >
                     <User className="w-4 h-4" />

@@ -2,7 +2,10 @@ import express from "express";
 import { protect, adminOnly } from "../middleware/authMiddleware";
 
 // Dashboard
-import { getDashboardStats } from "../controllers/Admin/adminDashboardController";
+import { getDashboardStats ,
+  getSemesterStats
+
+} from "../controllers/Admin/adminDashboardController";
 
 // Subject Management
 import {
@@ -20,13 +23,14 @@ import {
   getGroupsBySemester,
   assignTeacherToGroup,
   assignStudentToGroup,
+  autoAssignStudents
 } from "../controllers/Admin/groupController";
 
 // Promotion & Results
 import {
   promoteSemester,
   calculateSubjectResult,
-  getSemesterStats,
+  
 } from "../controllers/Admin/promotionController";
 
 // Assignment Management (View/Delete Only)
@@ -70,6 +74,7 @@ const router = express.Router();
  📊 DASHBOARD
 ============================================================ */
 router.get("/dashboard", protect, adminOnly, getDashboardStats);
+router.get('/semester-stats',protect, adminOnly,getSemesterStats)
 
 /* ============================================================
  👥 USER CREATION & APPROVAL
@@ -103,13 +108,14 @@ router.get("/groups", protect, adminOnly, getAllGroups);
 router.get("/groups/semester/:semester", protect, adminOnly, getGroupsBySemester);
 router.post("/groups/assign-teacher", protect, adminOnly, assignTeacherToGroup);
 router.post("/groups/assign-student", protect, adminOnly, assignStudentToGroup);
+router.post("/groups/auto-assign-students", protect, adminOnly, autoAssignStudents);
 
 /* ============================================================
  🎓 PROMOTION & RESULTS
 ============================================================ */
 router.post("/promote/:semester", protect, adminOnly, promoteSemester);
 router.post("/calculate-result", protect, adminOnly, calculateSubjectResult);
-router.get("/semester-stats", protect, adminOnly, getSemesterStats);
+
 
 /* ============================================================
  📘 ASSIGNMENT MANAGEMENT (View/Delete Only)

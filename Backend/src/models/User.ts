@@ -6,6 +6,7 @@ export interface IUser extends Document {
   password: string;
   role: "admin" | "student" | "teacher";
   isApproved: boolean;
+  profileCompleted: boolean; // NEW FIELD
   createdAt: Date;
   updatedAt: Date;
 }
@@ -20,7 +21,8 @@ const userSchema = new Schema<IUser>(
       enum: ["admin", "student", "teacher"], 
       required: true 
     },
-    isApproved: { type: Boolean, default: false }
+    isApproved: { type: Boolean, default: false },
+    profileCompleted: { type: Boolean, default: false } // NEW FIELD
   },
   { timestamps: true }
 );

@@ -145,26 +145,3 @@ export const calculateSubjectResult = async (req: Request, res: Response) => {
   }
 };
 
-// Get semester statistics
-export const getSemesterStats = async (_req: Request, res: Response) => {
-  try {
-    const stats = [];
-
-    for (let sem = 1; sem <= 8; sem++) {
-      const total = await Student.countDocuments({ currentSemester: sem });
-      const active = await Student.countDocuments({ currentSemester: sem, status: "active" });
-      const groups = await Group.countDocuments({ semester: sem, isActive: true });
-
-      stats.push({
-        semester: sem,
-        totalStudents: total,
-        activeStudents: active,
-        groups
-      });
-    }
-
-    res.status(200).json(stats);
-  } catch (error: any) {
-    res.status(500).json({ message: error.message });
-  }
-};

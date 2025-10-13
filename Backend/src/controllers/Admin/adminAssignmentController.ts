@@ -1,41 +1,40 @@
+// controllers/Admin/adminAssignmentController.ts
 import { Request, Response } from "express";
+import { createCrudControllers } from "../../utils/crudFactory";
 import Assignment from "../../models/Assignment";
 import Submission from "../../models/Submission";
 
-// 📋 Get all assignments
-export const getAllAssignments = async (_req: Request, res: Response) => {
-  try {
-    const assignments = await Assignment.find().populate("teacherId", "fullName email");
-    res.status(200).json(assignments);
-  } catch (error: any) {
-    res.status(500).json({ message: error.message });
-  }
-};
+// Create basic CRUD controllers using factory
+const assignmentControllers = createCrudControllers(
+  Assignment, 
+  "Assignment",
+  "teacherId" // Populate teacher info
+);
 
-// 🔍 Get single assignment
-export const getAssignmentById = async (req: Request, res: Response) => {
-  try {
-    const assignment = await Assignment.findById(req.params.id)
-      .populate("teacherId", "fullName")
-      .lean();
+// Export the basic CRUD operations
+export const getAllAssignments = assignmentControllers.getAll;
+export const getAssignmentById = assignmentControllers.getById;
 
-    if (!assignment) return res.status(404).json({ message: "Assignment not found" });
-
-    const submissions = await Submission.find({ assignmentId: req.params.id });
-    res.status(200).json({ ...assignment, submissions });
-  } catch (error: any) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-//  Delete any assignment
+// Custom delete function (deletes related submissions too)
 export const deleteAnyAssignment = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    
+    // Delete related submissions first
     await Submission.deleteMany({ assignmentId: id });
-    await Assignment.findByIdAndDelete(id);
-    res.status(200).json({ message: "Assignment and related submissions deleted" });
+    
+    // Delete assignment
+    const deleted = await Assignment.findByIdAndDelete(id);
+    
+    if (!deleted) {
+      return res.status(404).json({ message: "Assignment not found" });
+    }
+    
+    res.status(200).json({ 
+      message: "Assignment and related submissions deleted" 
+    });
   } catch (error: any) {
+    console.error("Error deleting assignment:", error);
     res.status(500).json({ message: error.message });
   }
 };
