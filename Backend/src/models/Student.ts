@@ -7,6 +7,25 @@ export interface IStudent extends Document {
   groupId?: mongoose.Types.ObjectId;
   enrollmentYear: number;
   status: "active" | "failed" | "promoted" | "graduated";
+  
+  // NEW PROFILE FIELDS
+  phoneNumber?: string;
+  dateOfBirth?: Date;
+  bio?: string;
+  profilePhoto?: string;
+  address?: {
+    province?: string;
+    city?: string;
+    
+  };
+
+  guardian?: {
+    name: string;
+    relationship: string;
+    phoneNumber: string;
+    email?: string;
+  };
+  
   academicHistory: {
     semester: number;
     groupId: mongoose.Types.ObjectId;
@@ -50,6 +69,19 @@ const studentSchema = new Schema<IStudent>(
       enum: ["active", "failed", "promoted", "graduated"], 
       default: "active" 
     },
+    
+    // NEW PROFILE FIELDS
+    phoneNumber: { type: String },
+    dateOfBirth: { type: Date },
+    bio: { type: String, maxlength: 500 },
+    profilePhoto: { type: String },
+    address: {
+      street: { type: String },
+      city: { type: String },
+      state: { type: String },
+      zipCode: { type: String }
+    },
+    
     academicHistory: [{
       semester: { type: Number, required: true },
       groupId: { type: Schema.Types.ObjectId, ref: "Group", required: true },

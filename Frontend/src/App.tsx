@@ -5,6 +5,8 @@ import { ToastContainer, Bounce } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import ProtectedRoute from './components/routes/ProtectedRoute';
 import Landingpage from './pages/Landingpage';
+import { ProfileSetupGuard, ProfileSetupRedirect } from "./components/routes/ProfileSetupGuard";
+
 //auth
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
@@ -14,7 +16,7 @@ import AdminLogin from './pages/auth/AdminLogin';
 import StudentDashboardPage from "./pages/Student/Studentdashboard";
 import StudentCoursesPage from './pages/Student/Studentcourse';
 import StudentAssignmentsPage from './pages/Student/Studentassingment';
-
+import ProfileSetup from './pages/Student/Studentprofilepage';
 //admin
 import AdminDashboardPage from './pages/Admin/Admindashboard';
 import AdminStudents from './pages/Admin/Student';
@@ -44,6 +46,16 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/admin/login" element={<AdminLogin />} />
           <Route path="/register" element={<Register />} />
+
+
+          <Route 
+          path="/student/profile-setup" 
+          element={
+            <ProfileSetupRedirect>
+              <ProfileSetup />
+            </ProfileSetupRedirect>
+          } 
+        />
 
           {/* protected routes */}
           <Route
