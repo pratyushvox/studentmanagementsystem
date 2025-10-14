@@ -41,7 +41,7 @@ const Navbar: React.FC<NavbarProps> = ({ onProfileClick }) => {
           <div className="flex items-center">
             <div className="flex-shrink-0 flex items-center gap-5">
               <GraduationCap className="w-9 h-9 text-[#ea7d17]" />
-              <span className="text-2xl font-bold text-gray-900">Padhaihub</span>
+              <span className="text-2xl font-bold text-gray-900">पढाइhub</span>
             </div>
           </div>
 
