@@ -26,6 +26,7 @@ import ConfirmDialog from "../../components/Confirmationdialogue";
 import { LoadingSpinner, ErrorDisplay } from "../../components/Loadingerror";
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import NoticeBoard from "../../components/Notice";
 
 // Import the hooks and utilities
 import { useApiGet, useApiPatch, useApiDelete } from "../../hooks/useApi";
@@ -218,35 +219,8 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Secondary Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <StatsCard
-            title="Pending Approvals"
-            count={pendingStudents.length}
-            subtitle="students waiting"
-            icon={Clock}
-            iconColor="text-orange-600"
-            iconBg="bg-orange-50"
-          />
-          
-          <StatsCard
-            title="Active Students"
-            count={stats?.totalStudents || 0}
-            subtitle="enrolled students"
-            icon={Users}
-            iconColor="text-green-600"
-            iconBg="bg-green-50"
-          />
-          
-          <StatsCard
-            title="Learning Posts"
-            count={stats?.totalPosts || 0}
-            subtitle="posts published"
-            icon={BookOpen}
-            iconColor="text-purple-600"
-            iconBg="bg-purple-50"
-          />
-        </div>
+       
+       
 
         {/* Pending Student Approvals */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -474,41 +448,15 @@ export default function AdminDashboard() {
         </div>
 
         {/* Quick Actions */}
-        <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl shadow-lg p-6 text-white">
-          <h2 className="text-xl font-bold mb-4">Quick Management</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <button 
-              onClick={() => window.location.href = '/admin/subjects'}
-              className="bg-white/20 backdrop-blur-sm hover:bg-white/30 rounded-lg p-4 transition-colors"
-            >
-              <BookMarked className="w-6 h-6 mb-2 mx-auto" />
-              <p className="text-sm font-medium">Subjects</p>
-              <p className="text-xs opacity-80 mt-1">{stats?.totalSubjects || 0} total</p>
-            </button>
-            <button 
-              onClick={() => window.location.href = '/admin/groups'}
-              className="bg-white/20 backdrop-blur-sm hover:bg-white/30 rounded-lg p-4 transition-colors"
-            >
-              <UsersRound className="w-6 h-6 mb-2 mx-auto" />
-              <p className="text-sm font-medium">Groups</p>
-              <p className="text-xs opacity-80 mt-1">{stats?.totalGroups || 0} total</p>
-            </button>
-            <button 
-              onClick={() => window.location.href = '/admin/users'}
-              className="bg-white/20 backdrop-blur-sm hover:bg-white/30 rounded-lg p-4 transition-colors"
-            >
-              <UserCheck className="w-6 h-6 mb-2 mx-auto" />
-              <p className="text-sm font-medium">Users</p>
-              <p className="text-xs opacity-80 mt-1">{pendingStudents.length} pending</p>
-            </button>
-            <button 
-              onClick={() => window.location.href = '/admin/promotion'}
-              className="bg-white/20 backdrop-blur-sm hover:bg-white/30 rounded-lg p-4 transition-colors"
-            >
-              <TrendingUp className="w-6 h-6 mb-2 mx-auto" />
-              <p className="text-sm font-medium">Promotion</p>
-              <p className="text-xs opacity-80 mt-1">Manage semesters</p>
-            </button>
+       <div className="bg-white rounded-xl shadow-md border border-gray-100 mt-10">
+          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+            <h2 className="text-lg font-bold text-gray-900">
+              Notice Board Management
+            </h2>
+          </div>
+          <div className="p-6">
+            {/* Integrate the NoticeBoard directly */}
+            <NoticeBoard userRole="admin" />
           </div>
         </div>
       </main>

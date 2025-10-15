@@ -36,6 +36,8 @@ import {
   getPostById
 } from "../controllers/Student/postcontroller";
 
+import { getStudentNotices } from "../controllers/Student/noticeController";
+
 const router = express.Router();
 
 // ============================================================
@@ -76,4 +78,9 @@ router.get("/submissions/:submissionId", protect, getSubmissionById);
 router.get("/posts", protect, getPostsForStudent);
 router.get("/posts/:postId", protect, getPostById);
 
+
+// notice 
+router.get("/notice", protect, getStudentNotices)
+
 export default router;
+

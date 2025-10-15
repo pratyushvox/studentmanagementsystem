@@ -30,6 +30,10 @@ import {
   deletePost
 } from "../controllers/Teacher/postController";
 
+
+import { getTeacherNotices } from "../controllers/Teacher/noticeController";
+
+
 const router = express.Router();
 
 // ============ DASHBOARD ============
@@ -86,5 +90,10 @@ router.get("/posts", protect, teacherOnly, getMyPosts);
 router.get("/posts/:postId", protect, teacherOnly, getMyPostById);
 router.put("/posts/:postId", protect, teacherOnly, updatePost);
 router.delete("/posts/:postId", protect, teacherOnly, deletePost);
+
+
+//notice 
+
+router.get("/notices", protect, teacherOnly, getTeacherNotices); 
 
 export default router;
