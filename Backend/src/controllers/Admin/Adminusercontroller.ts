@@ -292,6 +292,8 @@ export const createTeacher = async (req: Request, res: Response) => {
 
     // Create Teacher Profile
     const teacher = await Teacher.create({
+      fullName,
+      email,
       userId: user._id,
       teacherId,
       department,

@@ -1,78 +1,77 @@
 import { Request, Response } from "express";
-import User from "../../models/User";
+import User from "../../models/User.js";
 import Teacher from "../../models/Teacher";
 
 // Get All Teachers with Detailed Information
 export const getAllTeachersWithDetails = async (req: Request, res: Response) => {
   try {
     const { department, search } = req.query;
-
-    // Build query for Teacher collection
     const query: any = {};
 
-    if (department) {
-      query.department = department;
-    }
+    if (department) query.department = department;
 
-    // Fetch all teachers with populated references
     let teachers = await Teacher.find(query)
       .populate({
         path: "userId",
         select: "fullName email isApproved profileCompleted role",
-        model: User
+        model: User,
       })
       .populate({
         path: "assignedSubjects.subjectId",
-        select: "name code credits"
+        select: "name code credits",
       })
       .populate({
         path: "assignedSubjects.groups",
-        select: "name semester academicYear studentCount"
+        select: "name semester academicYear studentCount",
       })
       .sort({ createdAt: -1 });
 
-    // If search term provided, filter on client side
     if (search) {
       const searchLower = (search as string).toLowerCase();
-      teachers = teachers.filter(teacher => 
-        teacher.userId?.fullName?.toLowerCase().includes(searchLower) ||
-        teacher.userId?.email?.toLowerCase().includes(searchLower) ||
-        teacher.teacherId?.toLowerCase().includes(searchLower) ||
-        teacher.department?.toLowerCase().includes(searchLower)
+      teachers = teachers.filter(
+        (teacher) =>
+          teacher.fullName?.toLowerCase().includes(searchLower) ||
+          teacher.userId?.fullName?.toLowerCase().includes(searchLower) ||
+          teacher.userId?.email?.toLowerCase().includes(searchLower) ||
+          teacher.teacherId?.toLowerCase().includes(searchLower) ||
+          teacher.department?.toLowerCase().includes(searchLower)
       );
     }
 
-    // Format response with combined user and teacher data
-    const formattedTeachers = teachers.map(teacher => ({
-      _id: teacher._id,
-      userId: teacher.userId?._id,
-      teacherId: teacher.teacherId,
-      fullName: teacher.userId?.fullName,
-      email: teacher.userId?.email,
-      department: teacher.department,
-      specialization: teacher.specialization,
-      isApproved: teacher.userId?.isApproved,
-      profileCompleted: teacher.userId?.profileCompleted,
-      assignedSubjectsCount: teacher.assignedSubjects?.length || 0,
-      totalGroups: teacher.assignedSubjects?.reduce((sum, subject) => 
-        sum + (subject.groups?.length || 0), 0) || 0,
-      createdAt: teacher.createdAt
-    }));
+    const formattedTeachers = teachers.map((teacher) => ({
+  _id: teacher._id,
+  userId: teacher.userId?._id,
+  teacherId: teacher.teacherId,
+  fullName: teacher.fullName || teacher.userId?.fullName,
+  email: teacher.userId?.email,
+  department: teacher.department,
+  specialization: teacher.specialization,
+  isApproved: teacher.userId?.isApproved,
+  profileCompleted: teacher.userId?.profileCompleted,
+  assignedSubjects: teacher.assignedSubjects || [], // 👈 add this line
+  assignedSubjectsCount: teacher.assignedSubjects?.length || 0,
+  totalGroups:
+    teacher.assignedSubjects?.reduce(
+      (sum, subject) => sum + (subject.groups?.length || 0),
+      0
+    ) || 0,
+  createdAt: teacher.createdAt,
+}));
+
 
     res.status(200).json({
       message: "Teachers fetched successfully",
       count: formattedTeachers.length,
-      teachers: formattedTeachers
+      teachers: formattedTeachers,
     });
   } catch (error: any) {
     console.error("Error fetching teachers with details:", error);
     res.status(500).json({
       message: "Failed to fetch teachers",
-      error: error.message
+      error: error.message,
     });
   }
 };
-
 // Get Single Teacher with Full Details (for detail view/modal)
 export const getTeacherDetails = async (req: Request, res: Response) => {
   try {
@@ -114,33 +113,40 @@ export const getTeacherDetails = async (req: Request, res: Response) => {
 export const updateTeacherDetails = async (req: Request, res: Response) => {
   try {
     const { teacherId } = req.params;
-    const { department, specialization } = req.body;
+    const { fullName, department, specialization } = req.body;
 
-    const teacher = await Teacher.findByIdAndUpdate(
-      teacherId,
-      {
-        ...(department && { department }),
-        ...(specialization && { specialization })
-      },
-      { new: true }
-    )
-      .populate("userId", "fullName email")
-      .populate("assignedSubjects.subjectId", "name code")
-      .populate("assignedSubjects.groups", "name semester");
+    const teacher = await Teacher.findById(teacherId);
 
     if (!teacher) {
       return res.status(404).json({ message: "Teacher not found" });
     }
 
+    // Update teacher document
+    if (fullName) teacher.fullName = fullName;
+    if (department) teacher.department = department;
+    if (specialization) teacher.specialization = specialization;
+
+    await teacher.save();
+
+    // Update related user full name too
+    if (fullName && teacher.userId) {
+      await User.findByIdAndUpdate(teacher.userId, { fullName });
+    }
+
+    const updatedTeacher = await Teacher.findById(teacherId)
+      .populate("userId", "fullName email")
+      .populate("assignedSubjects.subjectId", "name code")
+      .populate("assignedSubjects.groups", "name semester");
+
     res.status(200).json({
       message: "Teacher updated successfully",
-      teacher
+      teacher: updatedTeacher,
     });
   } catch (error: any) {
     console.error("Error updating teacher:", error);
     res.status(500).json({
       message: "Failed to update teacher",
-      error: error.message
+      error: error.message,
     });
   }
 };

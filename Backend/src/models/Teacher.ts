@@ -3,6 +3,8 @@ import mongoose, { Schema, Document } from "mongoose";
 export interface ITeacher extends Document {
   userId: mongoose.Types.ObjectId;
   teacherId: string; 
+  fullName: string;
+  email: string;
   department?: string;
   specialization?: string;
   assignedSubjects: {
@@ -16,6 +18,8 @@ const teacherSchema = new Schema<ITeacher>(
   {
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     teacherId: { type: String, required: true, unique: true },
+    fullName: { type: String, required: true },
+    email: { type: String, required: true },
     department: String,
     specialization: String,
     assignedSubjects: [{
@@ -26,5 +30,10 @@ const teacherSchema = new Schema<ITeacher>(
   },
   { timestamps: true }
 );
+
+// Index for faster queries
+teacherSchema.index({ teacherId: 1 });
+teacherSchema.index({ email: 1 });
+teacherSchema.index({ department: 1 });
 
 export default mongoose.model<ITeacher>("Teacher", teacherSchema);
