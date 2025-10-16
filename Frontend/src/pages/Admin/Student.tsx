@@ -20,17 +20,11 @@ import ConfirmDialog from "../../components/Confirmationdialogue";
 import UserFormModal from "../../components/Userformmodal";
 import StatsCard from "../../components/Cardstats";
 import { LoadingSpinner, ErrorDisplay } from "../../components/Loadingerror";
+import { useApiGet, useApiPost, useApiPut, useApiPatch, useApiDelete } from "../../hooks/useApi";
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
-const API_BASE_URL = "http://localhost:5000/api";
-
 export default function AdminStudents() {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [students, setStudents] = useState([]);
-  const [filteredStudents, setFilteredStudents] = useState([]);
-  const [groups, setGroups] = useState([]);
   const [activeItem, setActiveItem] = useState("students");
   const [searchTerm, setSearchTerm] = useState("");
   const [filterSemester, setFilterSemester] = useState("all");
@@ -39,9 +33,8 @@ export default function AdminStudents() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAssignGroupModal, setShowAssignGroupModal] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState(null);
-  const [autoAssignLoading, setAutoAssignLoading] = useState(false);
+  const [filteredStudents, setFilteredStudents] = useState([]);
 
-  
   const [confirmDialog, setConfirmDialog] = useState({
     isOpen: false,
     type: "danger",
@@ -63,7 +56,101 @@ export default function AdminStudents() {
     groupId: ""
   });
 
-  // Define form fields for student
+  // API Hooks
+  const { 
+    data: studentsData, 
+    loading: studentsLoading, 
+    error: studentsError, 
+    refetch: refetchStudents 
+  } = useApiGet("/admin/students-with-details", {
+    autoFetch: true,
+    onError: (err) => toast.error(`Failed to load students: ${err}`)
+  });
+
+  const { 
+    data: groupsData, 
+    loading: groupsLoading 
+  } = useApiGet("/admin/groups", {
+    autoFetch: true,
+    onError: (err) => toast.error(`Failed to load groups: ${err}`)
+  });
+
+  const { post: createStudentApi } = useApiPost({
+    onSuccess: () => {
+      toast.success("Student added successfully!");
+      setShowAddModal(false);
+      setNewStudent({
+        fullName: "",
+        email: "",
+        password: "",
+        semester: "1",
+        enrollmentYear: new Date().getFullYear().toString()
+      });
+      refetchStudents();
+    },
+    onError: (err) => toast.error(err || "Failed to add student")
+  });
+
+  const { put: updateStudentApi } = useApiPut({
+    onSuccess: () => {
+      toast.success("Student updated successfully!");
+      setShowEditModal(false);
+      setSelectedStudent(null);
+      refetchStudents();
+    },
+    onError: (err) => toast.error(err || "Failed to update student")
+  });
+
+  const { post: assignGroupApi } = useApiPost({
+    onSuccess: () => {
+      toast.success("Student assigned to group successfully!");
+      setShowAssignGroupModal(false);
+      setAssignGroupData({ studentId: "", groupId: "" });
+      refetchStudents();
+    },
+    onError: (err) => toast.error(err || "Failed to assign group")
+  });
+
+  const { patch: approveStudentApi } = useApiPatch({
+    onSuccess: (data) => {
+      toast.success(`${data.user?.fullName} approved successfully!`);
+      refetchStudents();
+    },
+    onError: (err) => toast.error(err || "Failed to approve student")
+  });
+
+  const { delete: deleteStudentApi } = useApiDelete({
+    onSuccess: () => {
+      toast.success("Student deleted successfully!");
+      refetchStudents();
+    },
+    onError: (err) => toast.error(err || "Failed to delete student")
+  });
+
+  const { post: autoAssignApi } = useApiPost({
+    onSuccess: (data) => {
+      let message = `Successfully assigned ${data.assigned} students!`;
+      if (data.skipped > 0) {
+        message += `\n\nSkipped ${data.skipped} students (no available groups or groups are full)`;
+      }
+      if (data.details && data.details.length > 0) {
+        message += '\n\nDetails:';
+        data.details.forEach((detail: any) => {
+          message += `\n• Semester ${detail.semester}: ${detail.assigned} assigned, ${detail.skipped} skipped`;
+        });
+      }
+      alert(message);
+      toast.success(`Assigned ${data.assigned} students using Round-Robin algorithm!`);
+      refetchStudents();
+    },
+    onError: (err) => toast.error(err || "Failed to auto-assign students")
+  });
+
+  // Get students array from response
+  const students = studentsData?.students || [];
+  const groups = groupsData?.data || groupsData || [];
+
+  // Define form fields
   const studentAddFields = [
     {
       name: "fullName",
@@ -126,68 +213,18 @@ export default function AdminStudents() {
     }
   ];
 
+  // Filter students
   useEffect(() => {
-    fetchStudents();
-    fetchGroups();
-  }, []);
-
-  useEffect(() => {
-    filterStudents();
-  }, [students, searchTerm, filterSemester, filterStatus]);
-
-  const fetchStudents = async () => {
-    try {
-      setLoading(true);
-      const token = localStorage.getItem("token");
-      
-      // Fetch User documents
-      const usersRes = await fetch(`${API_BASE_URL}/admin/users`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const users = await usersRes.json();
-      
-      // For now, we'll work with User data
-      // In full implementation, you'd fetch Student profiles too
-      const studentsOnly = users.filter((user: { role: string; }) => user.role === "student");
-      
-      setStudents(studentsOnly);
-      setFilteredStudents(studentsOnly);
-      setError(null);
-    } catch (err) {
-      setError(err.message);
-      console.error("Error fetching students:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-
-
-  const fetchGroups = async () => {
-    try {
-      const token = localStorage.getItem("token");
-      const res = await fetch(`${API_BASE_URL}/admin/groups`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const data = await res.json();
-      setGroups(data);
-    } catch (err) {
-      console.error("Error fetching groups:", err);
-    }
-  };
-
-  const filterStudents = () => {
     let filtered = [...students];
 
     if (searchTerm) {
       filtered = filtered.filter(student => 
-        student.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        student.email.toLowerCase().includes(searchTerm.toLowerCase())
+        student.fullName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        student.email?.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
 
     if (filterSemester !== "all") {
-      // Note: This will work once Student profiles are implemented
       filtered = filtered.filter(student => 
         student.semester?.toString() === filterSemester
       );
@@ -202,195 +239,47 @@ export default function AdminStudents() {
     }
 
     setFilteredStudents(filtered);
-  };
+  }, [students, searchTerm, filterSemester, filterStatus]);
 
-  const handleAutoAssignGroups = async () => {
-  if (!confirm("🤖 This will automatically assign all unassigned students to groups using Round-Robin distribution.\n\nStudents will be evenly distributed across available groups in their semester.\n\nContinue?")) {
-    return;
-  }
-
-  try {
-    setAutoAssignLoading(true);
-    const token = localStorage.getItem("token");
-    
-    const response = await fetch(`${API_BASE_URL}/admin/groups/auto-assign-students`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`
-      }
-    });
-
-    const data = await response.json();
-
-    if (response.ok && data.success) {
-      // Show detailed success message
-      let message = ` Successfully assigned ${data.assigned} students!`;
-      
-      if (data.skipped > 0) {
-        message += `\n\n Skipped ${data.skipped} students (no available groups or groups are full)`;
-      }
-
-      // Show details per semester
-      if (data.details && data.details.length > 0) {
-        message += '\n\n Details:';
-        data.details.forEach((detail: any) => {
-          message += `\n• Semester ${detail.semester}: ${detail.assigned} assigned, ${detail.skipped} skipped`;
-        });
-      }
-
-      alert(message);
-      toast.success(`Assigned ${data.assigned} students using Round-Robin algorithm!`);
-      
-      // Refresh students list
-      fetchStudents();
-    } else {
-      toast.error(data.message || "Failed to auto-assign students");
-    }
-  } catch (err: any) {
-    console.error("Auto-assign error:", err);
-    toast.error("Error during auto-assignment: " + err.message);
-  } finally {
-    setAutoAssignLoading(false);
-  }
-};
-
-
+  // Handlers
   const handleAddStudent = async (e: { preventDefault: () => void; }) => {
     e.preventDefault();
-    try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(`${API_BASE_URL}/admin/create-student`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          ...newStudent,
-          semester: parseInt(newStudent.semester),
-          enrollmentYear: parseInt(newStudent.enrollmentYear)
-        })
-      });
-
-      if (response.ok) {
-        toast.success("Student added successfully!");
-        setShowAddModal(false);
-        setNewStudent({
-          fullName: "",
-          email: "",
-          password: "",
-          semester: "1",
-          enrollmentYear: new Date().getFullYear().toString()
-        });
-        fetchStudents();
-      } else {
-        const data = await response.json();
-        toast.error(data.message || "Failed to add student");
-      }
-    } catch (err) {
-      toast.error("Error adding student: " + err.message);
-    }
+    await createStudentApi("/admin/create-student", {
+      ...newStudent,
+      semester: parseInt(newStudent.semester),
+      enrollmentYear: parseInt(newStudent.enrollmentYear)
+    });
   };
 
   const handleEditStudent = async (e: { preventDefault: () => void; }) => {
     e.preventDefault();
-    try {
-      const token = localStorage.getItem("token");
-      
-      const response = await fetch(`${API_BASE_URL}/admin/users/${selectedStudent._id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          fullName: selectedStudent.fullName,
-          email: selectedStudent.email
-        })
-      });
-
-      if (response.ok) {
-        toast.success("Student updated successfully!");
-        setShowEditModal(false);
-        setSelectedStudent(null);
-        fetchStudents();
-      } else {
-        const data = await response.json();
-        toast.error(data.message || "Failed to update student");
-      }
-    } catch (err) {
-      toast.error("Error updating student: " + err.message);
-    }
+    await updateStudentApi(`/admin/users/${selectedStudent._id}`, {
+      fullName: selectedStudent.fullName,
+      email: selectedStudent.email
+    });
   };
 
   const handleAssignGroup = async (e: { preventDefault: () => void; }) => {
     e.preventDefault();
-    try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(`${API_BASE_URL}/admin/groups/assign-student`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify(assignGroupData)
-      });
-
-      if (response.ok) {
-        toast.success("Student assigned to group successfully!");
-        setShowAssignGroupModal(false);
-        setAssignGroupData({ studentId: "", groupId: "" });
-        fetchStudents();
-      } else {
-        const data = await response.json();
-        toast.error(data.message || "Failed to assign group");
-      }
-    } catch (err) {
-      toast.error("Error assigning group: " + err.message);
-    }
+    await assignGroupApi("/admin/groups/assign-student", assignGroupData);
   };
 
   const handleApproveStudent = async (student: { _id: any; fullName: any; }) => {
-    try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(`${API_BASE_URL}/admin/users/${student._id}/approve`, {
-        method: "PATCH",
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
-      if (response.ok) {
-        toast.success(`${student.fullName} approved successfully!`);
-        fetchStudents();
-      } else {
-        const data = await response.json();
-        toast.error(data.message || "Failed to approve student");
-      }
-    } catch (err) {
-      toast.error("Error approving student: " + err.message);
-    }
+    await approveStudentApi(`/admin/users/${student._id}/approve`);
   };
 
   const handleDeleteStudent = async (student: { _id: any; }) => {
-    try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(`${API_BASE_URL}/admin/users/${student._id}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
-      if (response.ok) {
-        toast.success("Student deleted successfully!");
-        fetchStudents();
-      } else {
-        const data = await response.json();
-        toast.error(data.message || "Failed to delete student");
-      }
-    } catch (err) {
-      toast.error("Error deleting student: " + err.message);
-    }
+    await deleteStudentApi(`/admin/users/${student._id}`);
   };
 
+  const handleAutoAssignGroups = async () => {
+    if (!confirm("This will automatically assign all unassigned students to groups using Round-Robin distribution.\n\nStudents will be evenly distributed across available groups in their semester.\n\nContinue?")) {
+      return;
+    }
+    await autoAssignApi("/admin/groups/auto-assign-students", {});
+  };
+
+  // Modal handlers
   const openEditModal = (student: SetStateAction<null>) => {
     setSelectedStudent(student);
     setShowEditModal(true);
@@ -431,7 +320,7 @@ export default function AdminStudents() {
       cell: (row) => (
         <div className="flex items-center">
           <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-semibold">
-            {row.fullName.charAt(0).toUpperCase()}
+            {row.fullName?.charAt(0).toUpperCase()}
           </div>
           <div className="ml-4">
             <div className="text-sm font-medium text-gray-900">
@@ -535,17 +424,17 @@ export default function AdminStudents() {
     }
   ];
 
-  if (loading) {
+  if (studentsLoading) {
     return <LoadingSpinner message="Loading students..." />;
   }
 
-  if (error) {
-    return <ErrorDisplay error={error} onRetry={fetchStudents} title="Error Loading Students" />;
+  if (studentsError) {
+    return <ErrorDisplay error={studentsError} onRetry={refetchStudents} title="Error Loading Students" />;
   }
 
   return (
     <div className="min-h-screen bg-gray-50">
-     <Navbar />
+      <Navbar />
       <Sidebar activeItem={activeItem} onItemClick={setActiveItem} userRole="admin" />
      
       <main className="lg:ml-64 p-6 lg:p-8">
@@ -605,58 +494,56 @@ export default function AdminStudents() {
           </div>
 
           <div className="bg-gradient-to-r from-purple-500 via-purple-600 to-blue-600 rounded-xl shadow-lg p-6 text-white mb-6">
-  <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
-    <div className="flex-1">
-      <div className="flex items-center gap-3 mb-3">
-        <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center backdrop-blur-sm">
-          <Wand2 className="w-6 h-6" />
-        </div>
-        <div>
-          <h3 className="text-xl font-bold">Auto-Assign Groups (Round-Robin)</h3>
-          <p className="text-sm text-white/90">Evenly distribute students across available groups</p>
-        </div>
-      </div>
-      
-      <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 space-y-2">
-        <div className="flex items-start gap-2 text-sm">
-          <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="font-semibold mb-1">How Round-Robin Works:</p>
-            <ul className="list-disc list-inside space-y-1 ml-2 text-white/90">
-              <li>Groups students by their semester</li>
-              <li>Distributes students one-by-one to each group in rotation</li>
-              <li>Result: Equal distribution (e.g., 100 students → 5 groups = 20 each)</li>
-              <li>Respects group capacity limits</li>
-            </ul>
+            <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+              <div className="flex-1">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center backdrop-blur-sm">
+                    <Wand2 className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold">Auto-Assign Groups (Round-Robin)</h3>
+                    <p className="text-sm text-white/90">Evenly distribute students across available groups</p>
+                  </div>
+                </div>
+                
+                <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 space-y-2">
+                  <div className="flex items-start gap-2 text-sm">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-semibold mb-1">How Round-Robin Works:</p>
+                      <ul className="list-disc list-inside space-y-1 ml-2 text-white/90">
+                        <li>Groups students by their semester</li>
+                        <li>Distributes students one-by-one to each group in rotation</li>
+                        <li>Result: Equal distribution (e.g., 100 students → 5 groups = 20 each)</li>
+                        <li>Respects group capacity limits</li>
+                      </ul>
+                    </div>
+                  </div>
+                  
+                  {students.filter(s => !s.groupId).length > 0 && (
+                    <div className="flex items-center gap-2 text-sm bg-white/10 rounded px-3 py-2 mt-2">
+                      <Users className="w-4 h-4" />
+                      <span className="font-semibold">{students.filter(s => !s.groupId).length} students</span>
+                      <span className="text-white/80">waiting to be assigned</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              <button
+                onClick={handleAutoAssignGroups}
+                disabled={groupsLoading || students.filter(s => !s.groupId).length === 0}
+                className="flex items-center gap-3 px-8 py-4 bg-white text-purple-600 rounded-lg hover:bg-gray-100 transition-all font-bold text-lg shadow-lg disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap transform hover:scale-105"
+              >
+                <Wand2 className="w-6 h-6" />
+                {groupsLoading ? (
+                  <span className="animate-pulse">Assigning...</span>
+                ) : (
+                  <>Auto-Assign All</>
+                )}
+              </button>
+            </div>
           </div>
-        </div>
-        
-        {students.filter(s => !s.groupId).length > 0 && (
-          <div className="flex items-center gap-2 text-sm bg-white/10 rounded px-3 py-2 mt-2">
-            <Users className="w-4 h-4" />
-            <span className="font-semibold">{students.filter(s => !s.groupId).length} students</span>
-            <span className="text-white/80">waiting to be assigned</span>
-          </div>
-        )}
-      </div>
-    </div>
-    
-    <button
-      onClick={handleAutoAssignGroups}
-      disabled={autoAssignLoading || students.filter(s => !s.groupId).length === 0}
-      className="flex items-center gap-3 px-8 py-4 bg-white text-purple-600 rounded-lg hover:bg-gray-100 transition-all font-bold text-lg shadow-lg disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap transform hover:scale-105"
-    >
-      <Wand2 className="w-6 h-6" />
-      {autoAssignLoading ? (
-        <>
-          <span className="animate-pulse">Assigning...</span>
-        </>
-      ) : (
-        <>Auto-Assign All</>
-      )}
-    </button>
-  </div>
-</div>
 
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
