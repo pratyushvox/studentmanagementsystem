@@ -1,8 +1,9 @@
 import { Request, Response } from "express";
 import Group from "../../models/Group";
 import Student from "../../models/Student";
+import Teacher from "../../models/Teacher";
 
-// Create group
+// 🟢 Create group
 export const createGroup = async (req: Request, res: Response) => {
   try {
     const { name, semester, academicYear, capacity } = req.body;
@@ -15,7 +16,7 @@ export const createGroup = async (req: Request, res: Response) => {
       name,
       semester,
       academicYear,
-      capacity: capacity || 50
+      capacity: capacity || 50,
     });
 
     res.status(201).json({ message: "Group created successfully", group });
@@ -24,62 +25,116 @@ export const createGroup = async (req: Request, res: Response) => {
   }
 };
 
-// Get all groups
+// 🟢 Get all groups (with populated students + teachers)
 export const getAllGroups = async (_req: Request, res: Response) => {
   try {
-    const groups = await Group.find().populate("subjectTeachers.teacherId", "fullName");
+    const groups = await Group.find()
+      .populate({
+        path: "students",
+        select: "fullName email userId currentSemester studentId phoneNumber",
+        populate: {
+          path: "userId",
+          select: "fullName email"
+        }
+      })
+      .populate({
+        path: "subjectTeachers.teacherId",
+        select: "fullName email teacherId",
+      });
+
     res.status(200).json(groups);
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }
 };
 
-// Get groups by semester
+// 🟢 Get groups by semester
 export const getGroupsBySemester = async (req: Request, res: Response) => {
   try {
     const { semester } = req.params;
-    const groups = await Group.find({ semester: parseInt(semester), isActive: true });
+    const groups = await Group.find({ semester: parseInt(semester), isActive: true })
+      .populate({
+        path: "students",
+        select: "fullName email userId currentSemester studentId phoneNumber",
+        populate: {
+          path: "userId",
+          select: "fullName email"
+        }
+      });
+
     res.status(200).json(groups);
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }
 };
 
-// Assign teacher to subject in group
+// 🟢 Get single group by ID with full details
+export const getGroupById = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const group = await Group.findById(id)
+      .populate({
+        path: "students",
+        select: "studentId currentSemester enrollmentYear status phoneNumber dateOfBirth",
+        populate: {
+          path: "userId",
+          select: "fullName email"
+        }
+      })
+      .populate({
+        path: "subjectTeachers.teacherId",
+        select: "fullName email teacherId",
+        populate: {
+          path: "userId",
+          select: "fullName email"
+        }
+      })
+      .populate({
+        path: "subjectTeachers.subjectId",
+        select: "name code credits"
+      });
+
+    if (!group) {
+      return res.status(404).json({ message: "Group not found" });
+    }
+
+    res.status(200).json(group);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// 🟢 Assign teacher to subject in group
 export const assignTeacherToGroup = async (req: Request, res: Response) => {
   try {
     const { groupId, subjectId, teacherId } = req.body;
 
     const group = await Group.findById(groupId);
-    if (!group) {
-      return res.status(404).json({ message: "Group not found" });
-    }
+    if (!group) return res.status(404).json({ message: "Group not found" });
 
-    // Check if assignment already exists
+    // Check if subject already assigned
     const exists = group.subjectTeachers.some(
-      st => st.subjectId.toString() === subjectId
+      (st) => st.subjectId.toString() === subjectId
     );
 
     if (exists) {
-      // Update existing assignment
-      group.subjectTeachers = group.subjectTeachers.map(st =>
+      group.subjectTeachers = group.subjectTeachers.map((st) =>
         st.subjectId.toString() === subjectId
           ? { ...st, teacherId, assignedAt: new Date() }
           : st
       );
     } else {
-      // Add new assignment
       group.subjectTeachers.push({
         subjectId,
         teacherId,
-        assignedAt: new Date()
+        assignedAt: new Date(),
       });
     }
 
     await group.save();
 
-    // Also update teacher's assignedSubjects
-    const Teacher = require("../../models/Teacher").default;
+    // Update teacher's assignedSubjects
     const teacher = await Teacher.findById(teacherId);
     if (teacher) {
       const subjectAssignment = teacher.assignedSubjects.find(
@@ -94,7 +149,7 @@ export const assignTeacherToGroup = async (req: Request, res: Response) => {
         teacher.assignedSubjects.push({
           subjectId,
           semester: group.semester,
-          groups: [groupId]
+          groups: [groupId],
         });
       }
       await teacher.save();
@@ -106,53 +161,66 @@ export const assignTeacherToGroup = async (req: Request, res: Response) => {
   }
 };
 
-// Assign student to group
+// 🟢 Assign single student to group
 export const assignStudentToGroup = async (req: Request, res: Response) => {
   try {
     const { studentId, groupId } = req.body;
 
     const group = await Group.findById(groupId);
-    if (!group) {
-      return res.status(404).json({ message: "Group not found" });
-    }
+    if (!group) return res.status(404).json({ message: "Group not found" });
 
     if (group.studentCount >= group.capacity) {
       return res.status(400).json({ message: "Group is full" });
     }
 
-    const student = await Student.findByIdAndUpdate(
-      studentId,
-      { groupId },
-      { new: true }
-    );
+    const student = await Student.findById(studentId).populate("userId", "fullName email");
+    if (!student) return res.status(404).json({ message: "Student not found" });
 
-    if (!student) {
-      return res.status(404).json({ message: "Student not found" });
+    student.groupId = groupId;
+    await student.save();
+
+    if (!group.students.includes(student._id)) {
+      group.students.push(student._id);
     }
-
-    group.studentCount += 1;
+    group.studentCount = group.students.length;
     await group.save();
 
-    res.status(200).json({ message: "Student assigned to group", student, group });
+    // Populate all students with full details
+    const populatedGroup = await Group.findById(groupId)
+      .populate({
+        path: "students",
+        select: "studentId currentSemester enrollmentYear status",
+        populate: {
+          path: "userId",
+          select: "fullName email"
+        }
+      });
+
+    res.status(200).json({ 
+      message: "Student assigned to group", 
+      student: {
+        _id: student._id,
+        studentId: student.studentId,
+        fullName: (student.userId as any).fullName,
+        email: (student.userId as any).email,
+        currentSemester: student.currentSemester
+      },
+      group: populatedGroup 
+    });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }
 };
 
-
-//Auto assign to the group 
-
-
+// 🟢 Auto-assign students (Round-Robin)
 export const autoAssignStudents = async (req: Request, res: Response) => {
   try {
-    // Find all students without groups (unassigned)
     const unassignedStudents = await Student.find({
-      $or: [
-        { groupId: { $exists: false } },
-        { groupId: null }
-      ],
-      status: "active"
-    }).sort({ currentSemester: 1, createdAt: 1 });
+      $or: [{ groupId: { $exists: false } }, { groupId: null }],
+      status: "active",
+    })
+    .populate("userId", "fullName email")
+    .sort({ currentSemester: 1, createdAt: 1 });
 
     if (unassignedStudents.length === 0) {
       return res.status(200).json({
@@ -160,19 +228,14 @@ export const autoAssignStudents = async (req: Request, res: Response) => {
         message: "No unassigned students found",
         assigned: 0,
         skipped: 0,
-        details: []
+        details: [],
       });
     }
 
-    console.log(`Found ${unassignedStudents.length} unassigned students`);
-
-    // Group students by semester
     const studentsBySemester: { [key: number]: any[] } = {};
-    unassignedStudents.forEach(student => {
+    unassignedStudents.forEach((student) => {
       const sem = student.currentSemester;
-      if (!studentsBySemester[sem]) {
-        studentsBySemester[sem] = [];
-      }
+      if (!studentsBySemester[sem]) studentsBySemester[sem] = [];
       studentsBySemester[sem].push(student);
     });
 
@@ -180,76 +243,57 @@ export const autoAssignStudents = async (req: Request, res: Response) => {
     let totalSkipped = 0;
     const assignmentDetails: any[] = [];
 
-    // Process each semester separately
     for (const [semester, students] of Object.entries(studentsBySemester)) {
       const semesterNum = parseInt(semester);
-      
-      console.log(`\nProcessing Semester ${semesterNum}: ${students.length} students`);
 
-      // Find available groups for this semester (with space)
       const availableGroups = await Group.find({
         semester: semesterNum,
         isActive: true,
-        $expr: { $lt: ["$studentCount", "$capacity"] }
-      }).sort({ studentCount: 1 }); // Start with least filled groups
+        $expr: { $lt: ["$studentCount", "$capacity"] },
+      }).sort({ studentCount: 1 });
 
       if (availableGroups.length === 0) {
-        console.log(` No available groups for Semester ${semesterNum}`);
         totalSkipped += students.length;
         assignmentDetails.push({
           semester: semesterNum,
           assigned: 0,
           skipped: students.length,
           reason: "No available groups for this semester",
-          totalStudents: students.length,
-          availableGroups: 0
         });
         continue;
       }
 
-      console.log(`✅ Found ${availableGroups.length} available groups`);
-
       let assigned = 0;
       let skipped = 0;
-      let groupIndex = 0; // Track which group to assign next (Round-Robin)
+      let groupIndex = 0;
 
-      // ROUND-ROBIN ASSIGNMENT
       for (const student of students) {
-        let attempts = 0;
         let studentAssigned = false;
+        let attempts = 0;
 
-        // Try to assign to a group (try all groups once)
         while (attempts < availableGroups.length && !studentAssigned) {
           const currentGroup = availableGroups[groupIndex];
 
-          // Check if current group has available space
           if (currentGroup.studentCount < currentGroup.capacity) {
-            // ✅ ASSIGN STUDENT TO GROUP
             student.groupId = currentGroup._id;
             await student.save();
 
-            // Update group count
-            currentGroup.studentCount += 1;
-            await currentGroup.save();
+            if (!currentGroup.students.includes(student._id)) {
+              currentGroup.students.push(student._id);
+            }
 
-            console.log(`✅ Assigned ${student.userId} to ${currentGroup.name} (${currentGroup.studentCount}/${currentGroup.capacity})`);
+            currentGroup.studentCount = currentGroup.students.length;
+            await currentGroup.save();
 
             assigned++;
             studentAssigned = true;
-          } else {
-            console.log(`⚠️ ${currentGroup.name} is full (${currentGroup.studentCount}/${currentGroup.capacity})`);
           }
 
-          // Move to next group in round-robin fashion
           groupIndex = (groupIndex + 1) % availableGroups.length;
           attempts++;
         }
 
-        // If student couldn't be assigned after trying all groups
-        if (!studentAssigned) {
-          console.log(` Could not assign student ${student.userId} - all groups full`);
-          skipped++;
-        }
+        if (!studentAssigned) skipped++;
       }
 
       totalAssigned += assigned;
@@ -259,35 +303,148 @@ export const autoAssignStudents = async (req: Request, res: Response) => {
         semester: semesterNum,
         assigned,
         skipped,
-        totalStudents: students.length,
-        availableGroups: availableGroups.length,
-        groupDistribution: availableGroups.map(g => ({
-          groupName: g.name,
-          students: g.studentCount,
-          capacity: g.capacity
-        }))
       });
-
-      console.log(`📊 Semester ${semesterNum} Summary: Assigned ${assigned}, Skipped ${skipped}`);
     }
 
-    // Final response
     res.status(200).json({
       success: true,
-      message: `Auto-assignment completed. Assigned ${totalAssigned} students across ${Object.keys(studentsBySemester).length} semester(s).`,
+      message: `Auto-assignment completed. Assigned ${totalAssigned} students.`,
       assigned: totalAssigned,
       skipped: totalSkipped,
-      totalProcessed: unassignedStudents.length,
-      algorithm: "Round-Robin",
-      details: assignmentDetails
+      details: assignmentDetails,
     });
-
   } catch (error: any) {
-    console.error(" Error in auto-assign:", error);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
       message: "Failed to auto-assign students",
-      error: error.message 
+      error: error.message,
     });
+  }
+};
+
+// 🟢 Update group
+export const updateGroup = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { name, semester, academicYear, capacity } = req.body;
+
+    const group = await Group.findById(id);
+    if (!group) return res.status(404).json({ message: "Group not found" });
+
+    if (name) group.name = name;
+    if (semester) group.semester = semester;
+    if (academicYear) group.academicYear = academicYear;
+    if (capacity && capacity >= group.studentCount) group.capacity = capacity;
+    else if (capacity && capacity < group.studentCount)
+      return res.status(400).json({ message: "Capacity cannot be less than student count" });
+
+    await group.save();
+    
+    // Return group with populated students
+    const populatedGroup = await Group.findById(id)
+      .populate({
+        path: "students",
+        select: "studentId currentSemester",
+        populate: {
+          path: "userId",
+          select: "fullName email"
+        }
+      });
+    
+    res.status(200).json({ message: "Group updated successfully", group: populatedGroup });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// 🟢 Delete group
+export const deleteGroup = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const group = await Group.findById(id);
+    if (!group) return res.status(404).json({ message: "Group not found" });
+
+    if (group.studentCount > 0)
+      return res.status(400).json({
+        message: `Cannot delete group with ${group.studentCount} students.`,
+      });
+
+    await Group.findByIdAndDelete(id);
+    res.status(200).json({ message: "Group deleted successfully" });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// 🟢 Get students by group
+export const getStudentsByGroup = async (req: Request, res: Response) => {
+  try {
+    const { groupId } = req.query;
+
+    if (!groupId) return res.status(400).json({ message: "Group ID is required" });
+
+    const group = await Group.findById(groupId)
+      .populate({
+        path: "students",
+        select: "studentId currentSemester enrollmentYear status phoneNumber",
+        populate: {
+          path: "userId",
+          select: "fullName email"
+        },
+        options: { sort: { "userId.fullName": 1 } },
+      })
+      .select("name semester capacity studentCount students");
+
+    if (!group) return res.status(404).json({ message: "Group not found" });
+
+    res.status(200).json({
+      groupName: group.name,
+      semester: group.semester,
+      capacity: group.capacity,
+      studentCount: group.studentCount,
+      students: group.students,
+    });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// 🟢 Remove student from group
+export const removeStudentFromGroup = async (req: Request, res: Response) => {
+  try {
+    const { studentId, groupId } = req.body;
+
+    const group = await Group.findById(groupId);
+    if (!group) return res.status(404).json({ message: "Group not found" });
+
+    const student = await Student.findById(studentId);
+    if (!student) return res.status(404).json({ message: "Student not found" });
+
+    // Remove student from group
+    group.students = group.students.filter(id => id.toString() !== studentId);
+    group.studentCount = group.students.length;
+    await group.save();
+
+    // Clear groupId from student
+    student.groupId = undefined;
+    await student.save();
+
+    const populatedGroup = await Group.findById(groupId)
+      .populate({
+        path: "students",
+        select: "studentId currentSemester",
+        populate: {
+          path: "userId",
+          select: "fullName email"
+        }
+      });
+
+    res.status(200).json({ 
+      message: "Student removed from group", 
+      group: populatedGroup 
+    });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
   }
 };

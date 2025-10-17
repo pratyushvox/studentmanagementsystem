@@ -22,6 +22,7 @@ import AdminDashboardPage from './pages/Admin/Admindashboard';
 import AdminStudents from './pages/Admin/Student';
 import AdminTeachers from './pages/Admin/Teacher';
 import AdminCourses from './pages/Admin/Course';
+import GroupManagement from './pages/Admin/Group';
 
 function App() {
   return (
@@ -116,6 +117,15 @@ function App() {
             element={
               <ProtectedRoute role="admin">
                 <AdminCourses />
+              </ProtectedRoute>
+            }
+          />
+
+           <Route
+            path="/admin/groups"
+            element={
+              <ProtectedRoute role="admin">
+                <GroupManagement />
               </ProtectedRoute>
             }
           />

@@ -19,15 +19,17 @@ import {
 } from "../controllers/Admin/subjectController";
 
 // Group Management
-import {
-  createGroup,
-  getAllGroups,
+import { 
+  createGroup, 
+  getAllGroups, 
   getGroupsBySemester,
+  updateGroup,
+  deleteGroup,
   assignTeacherToGroup,
   assignStudentToGroup,
-  autoAssignStudents
-} from "../controllers/Admin/groupController";
-
+  autoAssignStudents,
+  getStudentsByGroup
+} from "../controllers/admin/groupController";
 // Promotion & Results
 import {
   promoteSemester,
@@ -139,6 +141,11 @@ router.get("/groups/semester/:semester", protect, adminOnly, getGroupsBySemester
 router.post("/groups/assign-teacher", protect, adminOnly, assignTeacherToGroup);
 router.post("/groups/assign-student", protect, adminOnly, assignStudentToGroup);
 router.post("/groups/auto-assign-students", protect, adminOnly, autoAssignStudents);
+
+
+router.put("/groups/:id", protect, adminOnly, updateGroup);
+router.delete("/groups/:id", protect, adminOnly, deleteGroup);
+router.get("/students", protect, adminOnly, getStudentsByGroup); 
 
 /* ============================================================
  🎓 PROMOTION & RESULTS
