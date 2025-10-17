@@ -90,10 +90,24 @@ export default function GroupDetailsModal({
               </div>
             ) : (
               <div className="space-y-2 max-h-96 overflow-y-auto">
-                {students.map((student, idx) => (
+                {students.map((student: any, idx) => (
                   <div key={student._id || idx} className="bg-gray-50 p-3 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors">
-                    <p className="font-medium text-gray-900">{student.fullName}</p>
-                    <p className="text-sm text-gray-600">{student.userId || student.email}</p>
+                    <p className="font-medium text-gray-900">
+                      {student.userId?.fullName || student.fullName || 'N/A'}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      {student.userId?.email || student.email || 'No email'}
+                    </p>
+                    {student.studentId && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Student ID: {student.studentId}
+                      </p>
+                    )}
+                    {student.currentSemester && (
+                      <p className="text-xs text-gray-500">
+                        Current Semester: {student.currentSemester}
+                      </p>
+                    )}
                   </div>
                 ))}
               </div>

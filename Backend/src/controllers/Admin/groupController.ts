@@ -166,9 +166,10 @@ export const assignStudentToGroup = async (req: Request, res: Response) => {
   try {
     const { studentId, groupId } = req.body;
 
-    const group = await Group.findById(groupId);
+    const group = await Group.findById(groupId).populate('students');
     if (!group) return res.status(404).json({ message: "Group not found" });
 
+    // Check capacity using virtual studentCount
     if (group.studentCount >= group.capacity) {
       return res.status(400).json({ message: "Group is full" });
     }
@@ -182,7 +183,6 @@ export const assignStudentToGroup = async (req: Request, res: Response) => {
     if (!group.students.includes(student._id)) {
       group.students.push(student._id);
     }
-    group.studentCount = group.students.length;
     await group.save();
 
     // Populate all students with full details
@@ -246,13 +246,16 @@ export const autoAssignStudents = async (req: Request, res: Response) => {
     for (const [semester, students] of Object.entries(studentsBySemester)) {
       const semesterNum = parseInt(semester);
 
+      // Get available groups and populate students to calculate current count
       const availableGroups = await Group.find({
         semester: semesterNum,
         isActive: true,
-        $expr: { $lt: ["$studentCount", "$capacity"] },
-      }).sort({ studentCount: 1 });
+      }).populate('students').sort({ createdAt: 1 });
 
-      if (availableGroups.length === 0) {
+      // Filter groups that have space
+      const groupsWithSpace = availableGroups.filter(g => g.studentCount < g.capacity);
+
+      if (groupsWithSpace.length === 0) {
         totalSkipped += students.length;
         assignmentDetails.push({
           semester: semesterNum,
@@ -271,10 +274,13 @@ export const autoAssignStudents = async (req: Request, res: Response) => {
         let studentAssigned = false;
         let attempts = 0;
 
-        while (attempts < availableGroups.length && !studentAssigned) {
-          const currentGroup = availableGroups[groupIndex];
+        while (attempts < groupsWithSpace.length && !studentAssigned) {
+          const currentGroup = groupsWithSpace[groupIndex];
 
-          if (currentGroup.studentCount < currentGroup.capacity) {
+          // Recalculate current count
+          const currentCount = currentGroup.students.length;
+
+          if (currentCount < currentGroup.capacity) {
             student.groupId = currentGroup._id;
             await student.save();
 
@@ -282,14 +288,13 @@ export const autoAssignStudents = async (req: Request, res: Response) => {
               currentGroup.students.push(student._id);
             }
 
-            currentGroup.studentCount = currentGroup.students.length;
             await currentGroup.save();
 
             assigned++;
             studentAssigned = true;
           }
 
-          groupIndex = (groupIndex + 1) % availableGroups.length;
+          groupIndex = (groupIndex + 1) % groupsWithSpace.length;
           attempts++;
         }
 
@@ -328,15 +333,19 @@ export const updateGroup = async (req: Request, res: Response) => {
     const { id } = req.params;
     const { name, semester, academicYear, capacity } = req.body;
 
-    const group = await Group.findById(id);
+    const group = await Group.findById(id).populate('students');
     if (!group) return res.status(404).json({ message: "Group not found" });
 
     if (name) group.name = name;
     if (semester) group.semester = semester;
     if (academicYear) group.academicYear = academicYear;
-    if (capacity && capacity >= group.studentCount) group.capacity = capacity;
-    else if (capacity && capacity < group.studentCount)
+    
+    // Check capacity against current student count (virtual)
+    if (capacity && capacity >= group.studentCount) {
+      group.capacity = capacity;
+    } else if (capacity && capacity < group.studentCount) {
       return res.status(400).json({ message: "Capacity cannot be less than student count" });
+    }
 
     await group.save();
     
@@ -362,9 +371,10 @@ export const deleteGroup = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
-    const group = await Group.findById(id);
+    const group = await Group.findById(id).populate('students');
     if (!group) return res.status(404).json({ message: "Group not found" });
 
+    // Use virtual studentCount
     if (group.studentCount > 0)
       return res.status(400).json({
         message: `Cannot delete group with ${group.studentCount} students.`,
@@ -394,7 +404,7 @@ export const getStudentsByGroup = async (req: Request, res: Response) => {
         },
         options: { sort: { "userId.fullName": 1 } },
       })
-      .select("name semester capacity studentCount students");
+      .select("name semester capacity students");
 
     if (!group) return res.status(404).json({ message: "Group not found" });
 
@@ -402,7 +412,7 @@ export const getStudentsByGroup = async (req: Request, res: Response) => {
       groupName: group.name,
       semester: group.semester,
       capacity: group.capacity,
-      studentCount: group.studentCount,
+      studentCount: group.studentCount, // Virtual field will be available
       students: group.students,
     });
   } catch (error: any) {
@@ -423,7 +433,6 @@ export const removeStudentFromGroup = async (req: Request, res: Response) => {
 
     // Remove student from group
     group.students = group.students.filter(id => id.toString() !== studentId);
-    group.studentCount = group.students.length;
     await group.save();
 
     // Clear groupId from student

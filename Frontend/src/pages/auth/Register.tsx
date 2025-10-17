@@ -4,9 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import 'react-toastify/dist/ReactToastify.css';
 
-
 export default function Register() {
-  
   const navigate = useNavigate();
 
   const [showPassword, setShowPassword] = useState(false);
@@ -15,12 +13,11 @@ export default function Register() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [grade, setGrade] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
     // Validation
-    if (!fullName || !email || !password || !confirmPassword || !grade) {
+    if (!fullName || !email || !password || !confirmPassword) {
       toast.error("Please fill in all fields");
       return;
     }
@@ -40,15 +37,8 @@ export default function Register() {
     try {
       const response = await fetch("http://localhost:5000/api/auth/register/student", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          fullName,
-          email,
-          password,
-          grade, 
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fullName, email, password }),
       });
 
       const data = await response.json();
@@ -57,14 +47,10 @@ export default function Register() {
         throw new Error(data.message || "Registration failed");
       }
 
-      // Success
       toast.success(data.message || "Registration successful! Please wait for admin approval.");
-      
-     
-      setTimeout(() => {
-        navigate("/login");
-      }, 2000);
-    } catch (err) {
+
+      setTimeout(() => navigate("/login"), 2000);
+    } catch (err: any) {
       toast.error(err.message || "An error occurred during registration");
     } finally {
       setLoading(false);
@@ -114,29 +100,6 @@ export default function Register() {
               </div>
             </div>
 
-            {/* Grade Dropdown */}
-            <div>
-              <label htmlFor="grade" className="block text-sm font-medium text-gray-700 mb-2">
-                Select Grade
-              </label>
-              <select
-                id="grade"
-                value={grade}
-                onChange={(e) => setGrade(e.target.value)}
-                className="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-700 focus:border-transparent bg-white"
-                disabled={loading}
-              >
-                <option value="">-- Choose Grade --</option>
-                <option value="Grade 11">Grade 11</option>
-                <option value="Grade 12">Grade 12</option>
-                <option value="Bachelor 1st Year">Bachelor 1st Year</option>
-                <option value="Bachelor 2nd Year">Bachelor 2nd Year</option>
-                <option value="Bachelor 3rd Year">Bachelor 3rd Year</option>
-                <option value="Bachelor 4th Year">Bachelor 4th Year</option>
-
-              </select>
-            </div>
-
             {/* Email */}
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
@@ -150,7 +113,7 @@ export default function Register() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-700 focus:border-transparent"
-                  placeholder="You@gmail.com"
+                  placeholder="you@example.com"
                   disabled={loading}
                 />
               </div>
