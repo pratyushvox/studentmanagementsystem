@@ -21,7 +21,7 @@ import {
   gradeSubmission
 } from "../controllers/Teacher/submissionController";
 
-// Post Management
+// Post Management (Course Materials)
 import {
   createPost,
   getMyPosts,
@@ -30,9 +30,15 @@ import {
   deletePost
 } from "../controllers/Teacher/postController";
 
-
+// Notice
 import { getTeacherNotices } from "../controllers/Teacher/noticeController";
 
+// Analytics & Progress Tracking (NEW)
+import {
+  getWeeklyProgress,
+  getStudentPerformance,
+  getRecentActivity
+} from "../controllers/Teacher/analyticsController";
 
 const router = express.Router();
 
@@ -77,12 +83,11 @@ router.put(
   gradeSubmission
 );
 
-// ============ POST MANAGEMENT ============
+// ============ COURSE MATERIALS (POSTS) ============
 router.post(
   "/posts",
   protect,
   teacherOnly,
-  
   upload.single("file"),
   createPost
 );
@@ -91,9 +96,17 @@ router.get("/posts/:postId", protect, teacherOnly, getMyPostById);
 router.put("/posts/:postId", protect, teacherOnly, updatePost);
 router.delete("/posts/:postId", protect, teacherOnly, deletePost);
 
+// ============ NOTICES ============
+router.get("/notices", protect, teacherOnly, getTeacherNotices);
 
-//notice 
+// ============ ANALYTICS & PROGRESS TRACKING (NEW) 
+// Get weekly assignment progress/flow
+router.get("/analytics/weekly-progress", protect, teacherOnly, getWeeklyProgress);
 
-router.get("/notices", protect, teacherOnly, getTeacherNotices); 
+// Get student performance by subject/group
+router.get("/analytics/student-performance", protect, teacherOnly, getStudentPerformance);
+
+// Get recent activity feed for dashboard
+router.get("/analytics/recent-activity", protect, teacherOnly, getRecentActivity);
 
 export default router;

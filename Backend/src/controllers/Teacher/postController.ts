@@ -1,30 +1,55 @@
 import { Request, Response } from "express";
 import { uploadFileToCloudinary } from "../../utils/cloudinaryHelper";
 import Post from "../../models/Post";
+import Teacher from "../../models/Teacher";
 
-//  Create a new post (video/pdf)
+// Create a new post (video/pdf/document)
 export const createPost = async (req: Request, res: Response) => {
   try {
-    
     if (!req.user) {
       return res.status(401).json({ message: "User not authenticated" });
     }
 
-    const { title, contentType, grade, subject } = req.body;
+    const teacher = await Teacher.findOne({ userId: req.user._id });
+    if (!teacher) {
+      return res.status(404).json({ message: "Teacher profile not found" });
+    }
+
+    const { title, contentType, subjectId, groups, description } = req.body;
 
     if (!req.file) return res.status(400).json({ message: "No file uploaded" });
-    if (!title || !contentType || !grade || !subject)
+    if (!title || !contentType || !subjectId || !groups) {
       return res.status(400).json({ message: "All fields are required" });
+    }
+
+    // Verify teacher teaches this subject in these groups
+    const hasPermission = teacher.assignedSubjects.some(as =>
+      as.subjectId.toString() === subjectId &&
+      JSON.parse(groups).every((g: string) => as.groups.some(gr => gr.toString() === g))
+    );
+
+    if (!hasPermission) {
+      return res.status(403).json({ message: "You don't teach this subject in these groups" });
+    }
 
     const fileUrl = await uploadFileToCloudinary(req.file.path, "teacher_posts");
 
+    // Get semester from subject
+    const Subject = require("../../models/Subject").default;
+    const subject = await Subject.findById(subjectId);
+    if (!subject) {
+      return res.status(404).json({ message: "Subject not found" });
+    }
+
     const post = await Post.create({
-      teacherId: req.user._id, 
+      teacherId: teacher._id,
+      subjectId,
       title,
       contentType,
       fileUrl,
-      grade,
-      subject
+      semester: subject.semester,
+      groups: JSON.parse(groups),
+      description
     });
 
     res.status(201).json({ message: "Post uploaded successfully", post });
@@ -33,59 +58,90 @@ export const createPost = async (req: Request, res: Response) => {
   }
 };
 
-//  Get all posts created by this teacher
+// Get all posts created by this teacher
 export const getMyPosts = async (req: Request, res: Response) => {
   try {
-    // Fix 1: Add type guard for req.user
     if (!req.user) {
       return res.status(401).json({ message: "User not authenticated" });
     }
 
-    const { contentType, subject } = req.query;
-    const filter: any = { teacherId: req.user._id }; 
-    if (contentType) filter.contentType = contentType;
-    if (subject) filter.subject = subject;
+    const teacher = await Teacher.findOne({ userId: req.user._id });
+    if (!teacher) {
+      return res.status(404).json({ message: "Teacher profile not found" });
+    }
 
-    const posts = await Post.find(filter).sort({ createdAt: -1 });
+    const { contentType, subjectId, semester } = req.query;
+    const filter: any = { teacherId: teacher._id };
+    
+    if (contentType) filter.contentType = contentType;
+    if (subjectId) filter.subjectId = subjectId;
+    if (semester) filter.semester = Number(semester);
+
+    const posts = await Post.find(filter)
+      .populate("subjectId", "name code")
+      .populate("groups", "name semester")
+      .sort({ createdAt: -1 });
+
     res.json({ message: "Posts fetched successfully", count: posts.length, posts });
   } catch (err: any) {
     res.status(500).json({ message: err.message });
   }
 };
 
-//  Get a specific post
+// Get a specific post
 export const getMyPostById = async (req: Request, res: Response) => {
   try {
-    // Fix 1: Add type guard for req.user
     if (!req.user) {
       return res.status(401).json({ message: "User not authenticated" });
     }
 
+    const teacher = await Teacher.findOne({ userId: req.user._id });
+    if (!teacher) {
+      return res.status(404).json({ message: "Teacher profile not found" });
+    }
+
     const { postId } = req.params;
-    const post = await Post.findOne({ _id: postId, teacherId: req.user._id }); 
-    if (!post) return res.status(404).json({ message: "Post not found or you don't have permission" });
+    const post = await Post.findOne({ _id: postId, teacherId: teacher._id })
+      .populate("subjectId", "name code")
+      .populate("groups", "name semester");
+
+    if (!post) {
+      return res.status(404).json({ message: "Post not found or you don't have permission" });
+    }
+
     res.json({ message: "Post details fetched", post });
   } catch (err: any) {
     res.status(500).json({ message: err.message });
   }
 };
 
-//  Update post title
+// Update post
 export const updatePost = async (req: Request, res: Response) => {
   try {
-    // Fix 1: Add type guard for req.user
     if (!req.user) {
       return res.status(401).json({ message: "User not authenticated" });
     }
 
+    const teacher = await Teacher.findOne({ userId: req.user._id });
+    if (!teacher) {
+      return res.status(404).json({ message: "Teacher profile not found" });
+    }
+
     const { postId } = req.params;
-    const { title } = req.body;
-    if (!title) return res.status(400).json({ message: "Title is required" });
+    const { title, description } = req.body;
 
-    const post = await Post.findOne({ _id: postId, teacherId: req.user._id }); 
-    if (!post) return res.status(404).json({ message: "Post not found or no permission" });
+    if (!title && !description) {
+      return res.status(400).json({ message: "At least one field is required" });
+    }
 
-    post.title = title;
+    const post = await Post.findOne({ _id: postId, teacherId: teacher._id });
+    if (!post) {
+      return res.status(404).json({ message: "Post not found or no permission" });
+    }
+
+    if (title) post.title = title;
+    if (description !== undefined) post.description = description;
+
     await post.save();
     res.json({ message: "Post updated successfully", post });
   } catch (err: any) {
@@ -93,17 +149,24 @@ export const updatePost = async (req: Request, res: Response) => {
   }
 };
 
-//  Delete a post
+// Delete a post
 export const deletePost = async (req: Request, res: Response) => {
   try {
-    
     if (!req.user) {
       return res.status(401).json({ message: "User not authenticated" });
     }
 
+    const teacher = await Teacher.findOne({ userId: req.user._id });
+    if (!teacher) {
+      return res.status(404).json({ message: "Teacher profile not found" });
+    }
+
     const { postId } = req.params;
-    const post = await Post.findOne({ _id: postId, teacherId: req.user._id }); 
-    if (!post) return res.status(404).json({ message: "Post not found or you don't have permission" });
+    const post = await Post.findOne({ _id: postId, teacherId: teacher._id });
+    
+    if (!post) {
+      return res.status(404).json({ message: "Post not found or you don't have permission" });
+    }
 
     await Post.findByIdAndDelete(postId);
     res.json({ message: "Post deleted successfully" });

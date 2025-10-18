@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, Search, Plus, Edit2, Trash2, X, AlertCircle, Calendar, Clock, User } from 'lucide-react';
+import { Bell, Search, Plus, Edit2, Trash2, X, AlertCircle, Calendar, Clock, User ,ArrowRight} from 'lucide-react';
 import { useApiGet, useApiPost, useApiPut, useApiDelete } from '../hooks/useApi';
 
 // Types
@@ -521,3 +521,47 @@ const NoticeBoard: React.FC<NoticeBoardProps> = ({ userRole }) => {
 };
 
 export default NoticeBoard;
+
+
+export const NoticeCardCompact: React.FC<{ notice: Notice }> = ({ notice }) => {
+  const getPriorityStyles = (priority: string) => {
+    switch (priority) {
+      case 'urgent':
+        return { bg: 'bg-red-50 hover:bg-red-100', border: 'border-red-500', badge: 'bg-red-100 text-red-700 border-red-200' };
+      case 'high':
+        return { bg: 'bg-orange-50 hover:bg-orange-100', border: 'border-orange-500', badge: 'bg-orange-100 text-orange-700 border-orange-200' };
+      case 'medium':
+        return { bg: 'bg-yellow-50 hover:bg-yellow-100', border: 'border-yellow-500', badge: 'bg-yellow-100 text-yellow-700 border-yellow-200' };
+      default:
+        return { bg: 'bg-blue-50 hover:bg-blue-100', border: 'border-blue-500', badge: 'bg-blue-100 text-blue-700 border-blue-200' };
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
+  const styles = getPriorityStyles(notice.priority);
+
+  return (
+    <div className={`group relative rounded-lg p-4 border-l-4 transition-all hover:shadow-md ${styles.bg} ${styles.border}`}>
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <h3 className="font-bold text-gray-900 text-sm flex-1">{notice.title}</h3>
+        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${styles.badge}`}>
+          {notice.priority.toUpperCase()}
+        </span>
+      </div>
+      <p className="text-sm text-gray-700 mb-3 leading-relaxed line-clamp-2">{notice.content}</p>
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-gray-500 flex items-center gap-1">
+          <Calendar className="w-3 h-3" />
+          {formatDate(notice.createdAt)}
+        </span>
+        <button className="text-xs text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          Read More
+          <ArrowRight className="w-3 h-3" />
+        </button>
+      </div>
+    </div>
+  );
+};

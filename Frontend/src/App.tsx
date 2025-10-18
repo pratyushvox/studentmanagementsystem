@@ -17,6 +17,13 @@ import StudentDashboardPage from "./pages/Student/Studentdashboard";
 import StudentCoursesPage from './pages/Student/Studentcourse';
 import StudentAssignmentsPage from './pages/Student/Studentassingment';
 import ProfileSetup from './pages/Student/Studentprofilepage';
+
+
+// teacher 
+
+import TeacherDashboard from './pages/Teacher/Teacherdashboard'; 
+
+
 //admin
 import AdminDashboardPage from './pages/Admin/Admindashboard';
 import AdminStudents from './pages/Admin/Student';
@@ -129,6 +136,18 @@ function App() {
               </ProtectedRoute>
             }
           />
+
+
+           <Route
+            path="/teacher/dashboard"
+            element={
+              <ProtectedRoute role="teacher">
+                <TeacherDashboard />
+              </ProtectedRoute>
+            }
+          />
+
+
 
         </Routes>
       </Router>
