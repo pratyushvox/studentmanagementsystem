@@ -1,21 +1,27 @@
-// Updated Admin Routes with Notice Management
+
+
+// Updated Admin Routes with Module Leader Management
 import express from "express";
 import { protect, adminOnly } from "../middleware/authMiddleware";
 
 // Dashboard
-import { getDashboardStats ,
+import { 
+  getDashboardStats,
   getSemesterStats
 } from "../controllers/Admin/adminDashboardController";
 
 // Subject Management
-import {
+import { 
   createSubject,
   getAllSubjects,
+  getSubjectById,
   getSubjectsBySemester,
-  getSubjectById,        
   updateSubject,
   deleteSubject,
+  assignModuleLeader,
+  removeModuleLeader,
   getSubjectStatistics,
+  getModuleLeaderSubjects
 } from "../controllers/Admin/subjectController";
 
 // Group Management
@@ -30,6 +36,7 @@ import {
   autoAssignStudents,
   getStudentsByGroup
 } from "../controllers/admin/groupController";
+
 // Promotion & Results
 import {
   promoteSemester,
@@ -98,120 +105,120 @@ import {
   deleteNotice,
 } from '../controllers/Admin/Noticecontroller';
 
-const router = express.Router();
+const adminRouter = express.Router();
 
 /* ============================================================
  📊 DASHBOARD
 ============================================================ */
-router.get("/dashboard", protect, adminOnly, getDashboardStats);
-router.get('/semester-stats', protect, adminOnly, getSemesterStats);
+adminRouter.get("/dashboard", protect, adminOnly, getDashboardStats);
+adminRouter.get('/semester-stats', protect, adminOnly, getSemesterStats);
 
 /* ============================================================
  👥 USER CREATION & APPROVAL
 ============================================================ */
-router.post("/create-student", protect, adminOnly, createStudent);
-router.post("/create-teacher", protect, adminOnly, createTeacher);
-router.patch("/users/:id/approve", protect, adminOnly, approveStudent);
+adminRouter.post("/create-student", protect, adminOnly, createStudent);
+adminRouter.post("/create-teacher", protect, adminOnly, createTeacher);
+adminRouter.patch("/users/:id/approve", protect, adminOnly, approveStudent);
 
 /* ============================================================
  👤 USER MANAGEMENT
 ============================================================ */
-router.get("/users", protect, adminOnly, getAllUsers);          
-router.get("/users/:id", protect, adminOnly, getUserById);      
-router.put("/users/:id", protect, adminOnly, updateUser);       
-router.delete("/users/:id", protect, adminOnly, deleteUser);    
+adminRouter.get("/users", protect, adminOnly, getAllUsers);          
+adminRouter.get("/users/:id", protect, adminOnly, getUserById);      
+adminRouter.put("/users/:id", protect, adminOnly, updateUser);       
+adminRouter.delete("/users/:id", protect, adminOnly, deleteUser);    
 
 /* ============================================================
  📚 SUBJECT MANAGEMENT
 ============================================================ */
-router.get("/subjects/statistics", protect, adminOnly, getSubjectStatistics);
-router.get("/subjects", protect, adminOnly, getAllSubjects);
-router.get("/subjects/:id", protect, adminOnly, getSubjectById);
-router.get("/subjects/semester/:semester", protect, adminOnly, getSubjectsBySemester);
-router.post("/subjects", protect, adminOnly, createSubject);
-router.put("/subjects/:id", protect, adminOnly, updateSubject);
-router.delete("/subjects/:id", protect, adminOnly, deleteSubject);
+// Statistics
+adminRouter.get("/subjects/statistics", protect, adminOnly, getSubjectStatistics);
+
+// CRUD
+adminRouter.post("/subjects", protect, adminOnly, createSubject);
+adminRouter.get("/subjects", protect, adminOnly, getAllSubjects);
+adminRouter.get("/subjects/:id", protect, adminOnly, getSubjectById);
+adminRouter.get("/subjects/semester/:semester", protect, adminOnly, getSubjectsBySemester);
+adminRouter.put("/subjects/:id", protect, adminOnly, updateSubject);
+adminRouter.delete("/subjects/:id", protect, adminOnly, deleteSubject);
+
+// Module Leader Management (NEW)
+adminRouter.patch("/subjects/:subjectId/module-leader", protect, adminOnly, assignModuleLeader);
+adminRouter.delete("/subjects/:subjectId/module-leader", protect, adminOnly, removeModuleLeader);
+adminRouter.get("/subjects/module-leader/:teacherId", protect, adminOnly, getModuleLeaderSubjects);
 
 /* ============================================================
  👨‍👩‍👧‍👦 GROUP MANAGEMENT
 ============================================================ */
-router.post("/groups", protect, adminOnly, createGroup);
-router.get("/groups", protect, adminOnly, getAllGroups);
-router.get("/groups/semester/:semester", protect, adminOnly, getGroupsBySemester);
-router.post("/groups/assign-teacher", protect, adminOnly, assignTeacherToGroup);
-router.post("/groups/assign-student", protect, adminOnly, assignStudentToGroup);
-router.post("/groups/auto-assign-students", protect, adminOnly, autoAssignStudents);
+adminRouter.post("/groups", protect, adminOnly, createGroup);
+adminRouter.get("/groups", protect, adminOnly, getAllGroups);
+adminRouter.get("/groups/semester/:semester", protect, adminOnly, getGroupsBySemester);
+adminRouter.put("/groups/:id", protect, adminOnly, updateGroup);
+adminRouter.delete("/groups/:id", protect, adminOnly, deleteGroup);
 
-
-router.put("/groups/:id", protect, adminOnly, updateGroup);
-router.delete("/groups/:id", protect, adminOnly, deleteGroup);
-router.get("/students", protect, adminOnly, getStudentsByGroup); 
+// Group Assignments
+adminRouter.post("/groups/assign-teacher", protect, adminOnly, assignTeacherToGroup);
+adminRouter.post("/groups/assign-student", protect, adminOnly, assignStudentToGroup);
+adminRouter.post("/groups/auto-assign-students", protect, adminOnly, autoAssignStudents);
+adminRouter.get("/groups/:id/students", protect, adminOnly, getStudentsByGroup); 
 
 /* ============================================================
  🎓 PROMOTION & RESULTS
 ============================================================ */
-router.post("/promote/:semester", protect, adminOnly, promoteSemester);
-router.post("/calculate-result", protect, adminOnly, calculateSubjectResult);
+adminRouter.post("/promote/:semester", protect, adminOnly, promoteSemester);
+adminRouter.post("/calculate-result", protect, adminOnly, calculateSubjectResult);
 
 /* ============================================================
  📘 ASSIGNMENT MANAGEMENT (View/Delete Only)
 ============================================================ */
-router.get("/assignments", protect, adminOnly, getAllAssignments);
-router.get("/assignments/:id", protect, adminOnly, getAssignmentById);
-router.delete("/assignments/:id", protect, adminOnly, deleteAnyAssignment);
+adminRouter.get("/assignments", protect, adminOnly, getAllAssignments);
+adminRouter.get("/assignments/:id", protect, adminOnly, getAssignmentById);
+adminRouter.delete("/assignments/:id", protect, adminOnly, deleteAnyAssignment);
 
 /* ============================================================
  📰 POST MANAGEMENT (View/Delete Only)
 ============================================================ */
-router.get("/posts", protect, adminOnly, getAllPosts);
-router.get("/posts/:id", protect, adminOnly, getPostById);
-router.delete("/posts/:id", protect, adminOnly, deleteAnyPost);
+adminRouter.get("/posts", protect, adminOnly, getAllPosts);
+adminRouter.get("/posts/:id", protect, adminOnly, getPostById);
+adminRouter.delete("/posts/:id", protect, adminOnly, deleteAnyPost);
 
 /* ============================================================
  🧾 SUBMISSION MANAGEMENT (View/Delete Only)
 ============================================================ */
-router.get("/submissions", protect, adminOnly, getAllSubmissions);
-router.get("/submissions/:id", protect, adminOnly, getSubmissionById);
-router.delete("/submissions/:id", protect, adminOnly, deleteAnySubmission);
+adminRouter.get("/submissions", protect, adminOnly, getAllSubmissions);
+adminRouter.get("/submissions/:id", protect, adminOnly, getSubmissionById);
+adminRouter.delete("/submissions/:id", protect, adminOnly, deleteAnySubmission);
 
 /* ============================================================
  🎓 STUDENT DETAILS MANAGEMENT
 ============================================================ */
-router.get("/students-with-details", protect, adminOnly, getAllStudentsWithDetails);
-router.get("/students/:studentId", protect, adminOnly, getStudentDetails);
-router.put("/students/:studentId", protect, adminOnly, updateStudentDetails);
-router.get("/students/semester/:semester", protect, adminOnly, getStudentsBySemester);
-router.get("/students/unassigned/list", protect, adminOnly, getUnassignedStudents);
+adminRouter.get("/students-with-details", protect, adminOnly, getAllStudentsWithDetails);
+adminRouter.get("/students/unassigned/list", protect, adminOnly, getUnassignedStudents);
+adminRouter.get("/students/semester/:semester", protect, adminOnly, getStudentsBySemester);
+adminRouter.get("/students/:studentId", protect, adminOnly, getStudentDetails);
+adminRouter.put("/students/:studentId", protect, adminOnly, updateStudentDetails);
 
 /* ============================================================
  👨‍🏫 TEACHER DETAILS MANAGEMENT
 ============================================================ */
-router.get("/teachers-with-details", protect, adminOnly, getAllTeachersWithDetails);
-router.get("/teachers/unassigned/list", protect, adminOnly, getUnassignedTeachers);
-router.get("/teachers/:teacherId", protect, adminOnly, getTeacherDetails);
-router.put("/teachers/:teacherId", protect, adminOnly, updateTeacherDetails);
-router.get("/teachers/:teacherId/workload", protect, adminOnly, getTeacherWorkload);
-router.post("/teachers/:teacherId/subjects", protect, adminOnly, assignSubjectToTeacher);
-router.delete("/teachers/:teacherId/subjects/:subjectId", protect, adminOnly, removeSubjectFromTeacher);
-router.patch("/teachers/:teacherId/subjects/:subjectId/groups", protect, adminOnly, assignGroupsToTeacherSubject);
+adminRouter.get("/teachers-with-details", protect, adminOnly, getAllTeachersWithDetails);
+adminRouter.get("/teachers/unassigned/list", protect, adminOnly, getUnassignedTeachers);
+adminRouter.get("/teachers/:teacherId", protect, adminOnly, getTeacherDetails);
+adminRouter.put("/teachers/:teacherId", protect, adminOnly, updateTeacherDetails);
+adminRouter.get("/teachers/:teacherId/workload", protect, adminOnly, getTeacherWorkload);
+
+// Teacher-Subject Assignment
+adminRouter.post("/teachers/:teacherId/subjects", protect, adminOnly, assignSubjectToTeacher);
+adminRouter.delete("/teachers/:teacherId/subjects/:subjectId", protect, adminOnly, removeSubjectFromTeacher);
+adminRouter.patch("/teachers/:teacherId/subjects/:subjectId/groups", protect, adminOnly, assignGroupsToTeacherSubject);
 
 /* ============================================================
  📢 NOTICE MANAGEMENT
 ============================================================ */
-// Create new notice
-router.post("/create/notices", protect, adminOnly, createNotice);
+adminRouter.post("/notices", protect, adminOnly, createNotice);
+adminRouter.get("/notices", protect, adminOnly, getAllNotices);
+adminRouter.get("/notices/:id", protect, adminOnly, getNoticeById);
+adminRouter.put("/notices/:id", protect, adminOnly, updateNotice);
+adminRouter.delete("/notices/:id", protect, adminOnly, deleteNotice);
 
-// Get all notices (with filters: priority, isActive, targetAudience, search)
-router.get("/notices", protect, adminOnly, getAllNotices);
-
-// Get single notice with detailed info
-router.get("/notices/:id", protect, adminOnly, getNoticeById);
-
-// Update notice
-router.put("/notices/:id", protect, adminOnly, updateNotice);
-
-// Delete notice
-router.delete("/notices/:id", protect, adminOnly, deleteNotice);
-
-export default router;
-
+export default adminRouter;

@@ -5,21 +5,21 @@ import { upload } from "../middleware/uploadMiddleware";
 // Dashboard
 import { getTeacherDashboard } from "../controllers/Teacher/dashboardController";
 
-// Assignment Management
+// Assignment Management (from your assignment controller)
 import {
   createAssignment,
   getMyAssignments,
   getMyAssignmentById,
   updateAssignment,
-  deleteAssignment
+  deleteAssignment,
+  getMyAssignmentStatistics
 } from "../controllers/Teacher/assignmentController";
 
-// Submission & Grading
+// Submission & Grading (from your assignment controller)
 import {
-  getAssignmentSubmissions,
-  getSubmissionById,
+  getSubmissionsForGrading,
   gradeSubmission
-} from "../controllers/Teacher/submissionController";
+} from "../controllers/Teacher/assignmentController";
 
 // Post Management (Course Materials)
 import {
@@ -33,7 +33,7 @@ import {
 // Notice
 import { getTeacherNotices } from "../controllers/Teacher/noticeController";
 
-// Analytics & Progress Tracking (NEW)
+// Analytics & Progress Tracking
 import {
   getWeeklyProgress,
   getStudentPerformance,
@@ -42,10 +42,18 @@ import {
 
 const router = express.Router();
 
-// ============ DASHBOARD ============
+/* ============================================================
+ 📊 DASHBOARD
+============================================================ */
 router.get("/dashboard", protect, teacherOnly, getTeacherDashboard);
 
-// ============ ASSIGNMENT MANAGEMENT ============
+/* ============================================================
+ 📘 ASSIGNMENT MANAGEMENT
+============================================================ */
+// Statistics
+router.get("/assignments/statistics", protect, teacherOnly, getMyAssignmentStatistics);
+
+// Create assignment (Main = Module Leader, Weekly = Regular Teacher)
 router.post(
   "/assignments",
   protect,
@@ -53,37 +61,46 @@ router.post(
   upload.single("file"),
   createAssignment
 );
+
+// Get all my assignments
 router.get("/assignments", protect, teacherOnly, getMyAssignments);
+
+// Get specific assignment with details
 router.get("/assignments/:assignmentId", protect, teacherOnly, getMyAssignmentById);
+
+// Update assignment
 router.put(
   "/assignments/:assignmentId",
   protect,
   teacherOnly,
   updateAssignment
 );
+
+// Delete assignment
 router.delete("/assignments/:assignmentId", protect, teacherOnly, deleteAssignment);
 
-// ============ SUBMISSION & GRADING ============
+/* ============================================================
+ 🧾 SUBMISSION & GRADING
+============================================================ */
+// Get submissions for grading (includes main assignments from module leader)
 router.get(
-  "/assignments/:assignmentId/submissions",
+  "/submissions/for-grading",
   protect,
   teacherOnly,
-  getAssignmentSubmissions
+  getSubmissionsForGrading
 );
-router.get(
-  "/submissions/:submissionId",
-  protect,
-  teacherOnly,
-  getSubmissionById
-);
-router.put(
+
+// Grade a submission
+router.patch(
   "/submissions/:submissionId/grade",
   protect,
   teacherOnly,
   gradeSubmission
 );
 
-// ============ COURSE MATERIALS (POSTS) ============
+/* ============================================================
+ 📰 COURSE MATERIALS (POSTS)
+============================================================ */
 router.post(
   "/posts",
   protect,
@@ -96,10 +113,14 @@ router.get("/posts/:postId", protect, teacherOnly, getMyPostById);
 router.put("/posts/:postId", protect, teacherOnly, updatePost);
 router.delete("/posts/:postId", protect, teacherOnly, deletePost);
 
-// ============ NOTICES ============
+/* ============================================================
+ 📢 NOTICES
+============================================================ */
 router.get("/notices", protect, teacherOnly, getTeacherNotices);
 
-// ============ ANALYTICS & PROGRESS TRACKING (NEW) 
+/* ============================================================
+ 📊 ANALYTICS & PROGRESS TRACKING
+============================================================ */
 // Get weekly assignment progress/flow
 router.get("/analytics/weekly-progress", protect, teacherOnly, getWeeklyProgress);
 

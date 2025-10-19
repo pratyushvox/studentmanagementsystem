@@ -40,8 +40,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   // Teacher Menu with paths
   const teacherMenuItems = [
     { id: "dashboard", label: "Dashboard", icon: Home, path: "/teacher/dashboard" },
-    { id: "courses", label: "My Courses", icon: BookOpen, path: "/teacher/courses" },
-    { id: "students", label: "Students", icon: Users, path: "/teacher/students" },
+
     { id: "assignments", label: "Assignments", icon: FileText, path: "/teacher/assignments" },
     { id: "attendance", label: "Attendance", icon: Calendar, path: "/teacher/attendance" },
     { id: "grades", label: "Grades", icon: BarChart3, path: "/teacher/grades" },

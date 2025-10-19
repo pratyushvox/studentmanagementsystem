@@ -7,7 +7,9 @@ import {
   Award,
   Users,
   Clock,
-  Save
+  Save,
+  Crown,
+  UserCog
 } from "lucide-react";
 import Navbar from "../../components/Navbar";
 import Sidebar from "../../components/Sidebar";
@@ -15,10 +17,11 @@ import ConfirmDialog from "../../components/Confirmationdialogue";
 import UserFormModal from "../../components/Userformmodal";
 import StatsCard from "../../components/Cardstats";
 import { LoadingSpinner, ErrorDisplay } from "../../components/Loadingerror";
-import { useApiGet, useApiPost, useApiPut, useApiDelete } from "../../hooks/useApi";
+import { useApiGet, useApiPost, useApiPut, useApiDelete, useApiPatch } from "../../hooks/useApi";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import SubjectCard from "../../components/Subjectcard";
+import SubjectAssignmentModal from "../../components/teachersubjectassignmentmodal";
 
 interface Teacher {
   _id: string;
@@ -28,7 +31,17 @@ interface Teacher {
   email: string;
   department: string;
   specialization: string;
+  isModuleLeader?: boolean;
 }
+
+interface ModuleLeader {
+  _id: string;
+  fullName: string;
+  email: string;
+  teacherId: string;
+  department: string;
+}
+
 interface Subject {
   _id: string;
   code: string;
@@ -38,6 +51,8 @@ interface Subject {
   description?: string;
   isActive: boolean;
   createdBy: { fullName: string };
+  moduleLeader?: ModuleLeader;
+  hasModuleLeader?: boolean;
   teachersCount?: number;
   groupsCount?: number;
   studentsCount?: number;
@@ -52,11 +67,13 @@ export default function AdminCourses() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAssignTeacherModal, setShowAssignTeacherModal] = useState(false);
+  const [showAssignModuleLeaderModal, setShowAssignModuleLeaderModal] = useState(false);
   const [expandedSubjectId, setExpandedSubjectId] = useState<string | null>(null);
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
   const [filteredSubjects, setFilteredSubjects] = useState<Subject[]>([]);
   const [selectedTeacherForAssign, setSelectedTeacherForAssign] = useState("");
   const [selectedGroupsForAssign, setSelectedGroupsForAssign] = useState<string[]>([]);
+  const [selectedModuleLeader, setSelectedModuleLeader] = useState("");
 
   const [confirmDialog, setConfirmDialog] = useState({
     isOpen: false,
@@ -71,7 +88,8 @@ export default function AdminCourses() {
     name: "",
     semester: "1",
     credits: "3",
-    description: ""
+    description: "",
+    moduleLeaderId: ""
   });
 
   // API Hooks
@@ -110,7 +128,8 @@ export default function AdminCourses() {
         name: "",
         semester: "1",
         credits: "3",
-        description: ""
+        description: "",
+        moduleLeaderId: ""
       });
       refetchSubjects();
     },
@@ -147,10 +166,31 @@ export default function AdminCourses() {
     onError: (err) => toast.error(err || "Failed to assign teacher")
   });
 
+  const { patch: assignModuleLeaderApi } = useApiPatch({
+    onSuccess: () => {
+      toast.success("Module leader assigned successfully!");
+      setShowAssignModuleLeaderModal(false);
+      setSelectedModuleLeader("");
+      refetchSubjects();
+    },
+    onError: (err) => toast.error(err || "Failed to assign module leader")
+  });
+
+  const { delete: removeModuleLeaderApi } = useApiDelete({
+    onSuccess: () => {
+      toast.success("Module leader removed successfully!");
+      refetchSubjects();
+    },
+    onError: (err) => toast.error(err || "Failed to remove module leader")
+  });
+
   // Get data from API
   const subjects = Array.isArray(subjectsData) ? subjectsData : subjectsData?.subjects || [];
   const teachers = Array.isArray(teachersData) ? teachersData : teachersData?.teachers || [];
   const groups = Array.isArray(groupsData) ? groupsData : groupsData?.data || [];
+
+  // Calculate stats
+  const subjectsWithModuleLeader = subjects.filter(s => s.hasModuleLeader || s.moduleLeader).length;
 
   // Form fields
   const subjectAddFields = [
@@ -197,6 +237,19 @@ export default function AdminCourses() {
       type: "textarea" as const,
       placeholder: "Enter subject description",
       required: false
+    },
+    {
+      name: "moduleLeaderId",
+      label: "Module Leader (Optional)",
+      type: "select" as const,
+      required: false,
+      options: [
+        { value: "", label: "Assign later" },
+        ...teachers.map(t => ({
+          value: t._id,
+          label: `${t.fullName}${t.department ? ` - ${t.department}` : ''}`
+        }))
+      ]
     }
   ];
 
@@ -256,7 +309,8 @@ export default function AdminCourses() {
     await createSubjectApi("/admin/subjects", {
       ...newSubject,
       semester: parseInt(newSubject.semester),
-      credits: parseInt(newSubject.credits)
+      credits: parseInt(newSubject.credits),
+      ...(newSubject.moduleLeaderId && { moduleLeaderId: newSubject.moduleLeaderId })
     });
   };
 
@@ -274,19 +328,33 @@ export default function AdminCourses() {
     await deleteSubjectApi(`/admin/subjects/${subject._id}`);
   };
 
-const handleAssignTeacher = async (e: { preventDefault: () => void }) => {
-  e.preventDefault();
-  if (!selectedSubject || !selectedTeacherForAssign) return;
+  const handleAssignTeacher = async (e: { preventDefault: () => void }) => {
+    e.preventDefault();
+    if (!selectedSubject || !selectedTeacherForAssign) return;
 
-  await assignTeacherApi(
-    `/admin/teachers/${selectedTeacherForAssign}/subjects`,
-    {
-      subjectId: selectedSubject._id,
-      semester: selectedSubject.semester, 
-      groups: selectedGroupsForAssign
-    }
-  );
-};
+    await assignTeacherApi(
+      `/admin/teachers/${selectedTeacherForAssign}/subjects`,
+      {
+        subjectId: selectedSubject._id,
+        semester: selectedSubject.semester, 
+        groups: selectedGroupsForAssign
+      }
+    );
+  };
+
+  const handleAssignModuleLeader = async (e: { preventDefault: () => void }) => {
+    e.preventDefault();
+    if (!selectedSubject || !selectedModuleLeader) return;
+
+    await assignModuleLeaderApi(
+      `/admin/subjects/${selectedSubject._id}/module-leader`,
+      { moduleLeaderId: selectedModuleLeader }
+    );
+  };
+
+  const handleRemoveModuleLeader = async (subject: Subject) => {
+    await removeModuleLeaderApi(`/admin/subjects/${subject._id}/module-leader`);
+  };
 
   const handleExpandSubject = (subject: Subject) => {
     if (expandedSubjectId === subject._id) {
@@ -319,6 +387,22 @@ const handleAssignTeacher = async (e: { preventDefault: () => void }) => {
     setShowAssignTeacherModal(true);
   };
 
+  const openAssignModuleLeaderModal = (subject: Subject) => {
+    setSelectedSubject(subject);
+    setSelectedModuleLeader(subject.moduleLeader?._id || "");
+    setShowAssignModuleLeaderModal(true);
+  };
+
+  const openRemoveModuleLeaderConfirm = (subject: Subject) => {
+    setConfirmDialog({
+      isOpen: true,
+      type: "warning",
+      title: "Remove Module Leader",
+      message: `Are you sure you want to remove <strong>${subject.moduleLeader?.fullName}</strong> as module leader for <strong>${subject.name}</strong>?`,
+      onConfirm: () => handleRemoveModuleLeader(subject)
+    });
+  };
+
   if (subjectsLoading) {
     return <LoadingSpinner message="Loading subjects..." />;
   }
@@ -345,7 +429,7 @@ const handleAssignTeacher = async (e: { preventDefault: () => void }) => {
             <div>
               <h1 className="text-2xl font-semibold text-gray-900">Course Management</h1>
               <p className="text-gray-600 text-sm mt-1">
-                Manage all subjects, assign teachers, and track enrollments
+                Manage subjects, assign module leaders and teachers
               </p>
             </div>
             <button
@@ -369,12 +453,12 @@ const handleAssignTeacher = async (e: { preventDefault: () => void }) => {
             />
 
             <StatsCard
-              title="Total Credits"
-              count={subjects.reduce((sum, s) => sum + (s.credits || 0), 0)}
-              subtitle="credit hours"
-              icon={Award}
-              iconColor="text-indigo-600"
-              iconBg="bg-indigo-100"
+              title="Module Leaders"
+              count={subjectsWithModuleLeader}
+              subtitle="subjects with leaders"
+              icon={Crown}
+              iconColor="text-yellow-600"
+              iconBg="bg-yellow-100"
             />
 
             <StatsCard
@@ -445,7 +529,7 @@ const handleAssignTeacher = async (e: { preventDefault: () => void }) => {
             </div>
           </div>
 
-          {/* Subjects List - Using Imported SubjectCard */}
+          {/* Subjects List */}
           <div className="space-y-3">
             {filteredSubjects.length > 0 ? (
               filteredSubjects.map((subject) => (
@@ -457,6 +541,8 @@ const handleAssignTeacher = async (e: { preventDefault: () => void }) => {
                   onEdit={() => openEditModal(subject)}
                   onDelete={() => openDeleteConfirm(subject)}
                   onAssignTeacher={() => openAssignTeacherModal(subject)}
+                  onAssignModuleLeader={() => openAssignModuleLeaderModal(subject)}
+                  onRemoveModuleLeader={() => openRemoveModuleLeaderConfirm(subject)}
                   onRemoveTeacher={() => {}}
                   groups={groups}
                 />
@@ -495,9 +581,12 @@ const handleAssignTeacher = async (e: { preventDefault: () => void }) => {
         submitButtonText="Update Subject"
       />
 
-      {/* Assign Teacher Modal */}
+      {/* Assign Teacher Modal - Using SubjectAssignmentModal */}
       {showAssignTeacherModal && selectedSubject && (
-        <AssignTeacherModal
+        <SubjectAssignmentModal
+          isOpen={showAssignTeacherModal}
+          onClose={() => setShowAssignTeacherModal(false)}
+          onSubmit={handleAssignTeacher}
           subject={selectedSubject}
           teachers={teachers}
           groups={groups}
@@ -505,9 +594,23 @@ const handleAssignTeacher = async (e: { preventDefault: () => void }) => {
           setSelectedTeacher={setSelectedTeacherForAssign}
           selectedGroups={selectedGroupsForAssign}
           setSelectedGroups={setSelectedGroupsForAssign}
-          onSubmit={handleAssignTeacher}
-          onClose={() => setShowAssignTeacherModal(false)}
           loading={teachersLoading || groupsLoading}
+          type="regular-teacher"
+        />
+      )}
+
+      {/* Assign Module Leader Modal - Using SubjectAssignmentModal */}
+      {showAssignModuleLeaderModal && selectedSubject && (
+        <SubjectAssignmentModal
+          isOpen={showAssignModuleLeaderModal}
+          onClose={() => setShowAssignModuleLeaderModal(false)}
+          onSubmit={handleAssignModuleLeader}
+          subject={selectedSubject}
+          teachers={teachers}
+          selectedTeacher={selectedModuleLeader}
+          setSelectedTeacher={setSelectedModuleLeader}
+          loading={teachersLoading}
+          type="module-leader"
         />
       )}
 
@@ -519,127 +622,8 @@ const handleAssignTeacher = async (e: { preventDefault: () => void }) => {
         title={confirmDialog.title}
         message={confirmDialog.message}
         type={confirmDialog.type}
-        confirmText="Delete"
+        confirmText={confirmDialog.type === "warning" ? "Remove" : "Delete"}
       />
-    </div>
-  );
-}
-
-// Assign Teacher Modal Component
-interface AssignTeacherModalProps {
-  subject: Subject;
-  teachers: Teacher[];
-  groups: any[];
-  selectedTeacher: string;
-  setSelectedTeacher: (id: string) => void;
-  selectedGroups: string[];
-  setSelectedGroups: (ids: string[]) => void;
-  onSubmit: (e: React.FormEvent) => void;
-  onClose: () => void;
-  loading: boolean;
-}
-
-function AssignTeacherModal({
-  subject,
-  teachers,
-  groups,
-  selectedTeacher,
-  setSelectedTeacher,
-  selectedGroups,
-  setSelectedGroups,
-  onSubmit,
-  onClose,
-  loading
-}: AssignTeacherModalProps) {
-  const semesterGroups = groups.filter(
-    (g) => g.semester === subject.semester
-  );
-
-  const toggleGroup = (groupId: string) => {
-    setSelectedGroups(
-      selectedGroups.includes(groupId)
-        ? selectedGroups.filter((id) => id !== groupId)
-        : [...selectedGroups, groupId]
-    );
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-all duration-200">
-
-      <div className="bg-white rounded-lg max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
-        <h2 className="text-xl font-bold mb-4">Assign Teacher to Subject</h2>
-
-        <form onSubmit={onSubmit} className="space-y-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Select Teacher *
-            </label>
-            <select
-              value={selectedTeacher}
-              onChange={(e) => setSelectedTeacher(e.target.value)}
-              required
-              disabled={loading}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-            >
-              <option value="">Choose a teacher...</option>
-              {teachers.map((teacher) => (
-                <option key={teacher._id} value={teacher._id}>
-                  {teacher.fullName } 
-                  {teacher.specialization && ` (${teacher.specialization})`}
-                  {teacher.department && ` - ${teacher.department}`}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-3">
-              Assign to Groups (Optional)
-            </label>
-            <div className="space-y-2 max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-3">
-              {semesterGroups.length > 0 ? (
-                semesterGroups.map((group) => (
-                  <label key={group._id} className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={selectedGroups.includes(group._id)}
-                      onChange={() => toggleGroup(group._id)}
-                      disabled={loading}
-                      className="rounded text-blue-600"
-                    />
-                    <span className="text-sm text-gray-700">
-                      {group.name} ({group.studentCount || 0}/{group.capacity} students)
-                    </span>
-                  </label>
-                ))
-              ) : (
-                <p className="text-sm text-gray-500 text-center py-4">
-                  No groups available for Semester {subject.semester}
-                </p>
-              )}
-            </div>
-          </div>
-
-          <div className="flex gap-3 justify-end pt-4 border-t">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={loading}
-              className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition disabled:opacity-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={!selectedTeacher || loading}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:bg-gray-300 disabled:cursor-not-allowed"
-            >
-              <Save size={16} />
-              {loading ? "Assigning..." : "Assign Teacher"}
-            </button>
-          </div>
-        </form>
-      </div>
     </div>
   );
 }

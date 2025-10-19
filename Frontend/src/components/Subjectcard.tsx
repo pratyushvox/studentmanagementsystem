@@ -9,10 +9,20 @@ import {
   GraduationCap,
   Mail,
   Trash,
-  AlertCircle
+  AlertCircle,
+  Crown,
+  UserCog
 } from "lucide-react";
 import { toast } from "react-toastify";
 import ConfirmDialog from "../components/Confirmationdialogue"; 
+
+interface ModuleLeader {
+  _id: string;
+  fullName: string;
+  email: string;
+  teacherId: string;
+  department: string;
+}
 
 interface SubjectCardProps {
   subject: {
@@ -23,6 +33,8 @@ interface SubjectCardProps {
     credits: number;
     description?: string;
     isActive: boolean;
+    moduleLeader?: ModuleLeader;
+    hasModuleLeader?: boolean;
     teachersCount?: number;
     groupsCount?: number;
     studentsCount?: number;
@@ -32,6 +44,8 @@ interface SubjectCardProps {
   onEdit: () => void;
   onDelete: () => void;
   onAssignTeacher: () => void;
+  onAssignModuleLeader?: () => void;
+  onRemoveModuleLeader?: () => void;
   groups: any[];
 }
 
@@ -42,6 +56,7 @@ interface TeacherDetail {
   email: string;
   department: string;
   specialization?: string;
+  isModuleLeader?: boolean;
   groupsAssigned: Array<{
     _id: string;
     name: string;
@@ -56,6 +71,8 @@ export default function SubjectCard({
   onEdit,
   onDelete,
   onAssignTeacher,
+  onAssignModuleLeader,
+  onRemoveModuleLeader,
   groups
 }: SubjectCardProps) {
   const [teacherDetails, setTeacherDetails] = useState<TeacherDetail[]>([]);
@@ -98,6 +115,7 @@ export default function SubjectCard({
               email: teacher.email,
               department: teacher.department,
               specialization: teacher.specialization,
+              isModuleLeader: teacher.isModuleLeader,
               groupsAssigned: subjectAssignment.groups || []
             };
           }
@@ -159,21 +177,83 @@ export default function SubjectCard({
           <div className="flex-1">
             <div className="flex items-center gap-3 flex-wrap">
               <h3 className="text-lg font-semibold text-gray-900">{subject.name}</h3>
-              <span className="bg-blue-100 text-blue-700 px-2.5 py-0.5 rounded-full text-xs font-medium">{subject.code}</span>
+              <span className="bg-blue-100 text-blue-700 px-2.5 py-0.5 rounded-full text-xs font-medium">
+                {subject.code}
+              </span>
               {!subject.isActive && (
-                <span className="bg-gray-100 text-gray-700 px-2.5 py-0.5 rounded-full text-xs font-medium">Inactive</span>
+                <span className="bg-gray-100 text-gray-700 px-2.5 py-0.5 rounded-full text-xs font-medium">
+                  Inactive
+                </span>
               )}
             </div>
+
             <div className="flex items-center gap-4 mt-2 text-sm text-gray-600">
-              <span className="flex items-center gap-1"><Award className="w-4 h-4" />Semester {subject.semester}</span>
-              <span className="flex items-center gap-1"><Award className="w-4 h-4" />{subject.credits} Credits</span>
-              <span className="flex items-center gap-1"><GraduationCap className="w-4 h-4" />{subject.teachersCount || 0} Teachers</span>
-              <span className="flex items-center gap-1"><Users className="w-4 h-4" />{subject.studentsCount || 0} Students</span>
+              <span className="flex items-center gap-1">
+                <Award className="w-4 h-4" />
+                Semester {subject.semester}
+              </span>
+              <span className="flex items-center gap-1">
+                <Award className="w-4 h-4" />
+                {subject.credits} Credits
+              </span>
+              <span className="flex items-center gap-1">
+                <GraduationCap className="w-4 h-4" />
+                {subject.teachersCount || 0} Teachers
+              </span>
+              <span className="flex items-center gap-1">
+                <Users className="w-4 h-4" />
+                {subject.studentsCount || 0} Students
+              </span>
+            </div>
+
+            {/* Module Leader Badge */}
+            <div className="mt-3">
+              {subject.moduleLeader ? (
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-yellow-50 to-amber-50 border border-yellow-300 rounded-lg">
+                  <Crown className="w-4 h-4 text-yellow-600" />
+                  <span className="text-sm font-semibold text-yellow-800">
+                    Module Leader: {subject.moduleLeader.fullName}
+                  </span>
+                  <span className="text-xs text-yellow-600">
+                    ({subject.moduleLeader.teacherId})
+                  </span>
+                </div>
+              ) : (
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg">
+                  <Crown className="w-4 h-4 text-gray-400" />
+                  <span className="text-sm text-gray-500">No Module Leader Assigned</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
 
         <div className="flex items-center gap-2 ml-4">
+          {/* Module Leader Button */}
+          {subject.moduleLeader ? (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemoveModuleLeader?.();
+              }}
+              className="p-2 text-yellow-600 hover:bg-yellow-50 rounded-lg transition"
+              title="Remove module leader"
+            >
+              <Crown size={18} />
+            </button>
+          ) : (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onAssignModuleLeader?.();
+              }}
+              className="p-2 text-yellow-600 hover:bg-yellow-50 rounded-lg transition"
+              title="Assign module leader"
+            >
+              <Crown size={18} />
+            </button>
+          )}
+
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -201,6 +281,45 @@ export default function SubjectCard({
       {isExpanded && (
         <div className="border-t border-gray-200 bg-gray-50">
           <div className="p-5 space-y-6">
+            {/* Module Leader Details (Expanded View) */}
+            {subject.moduleLeader && (
+              <div className="bg-gradient-to-r from-yellow-50 to-amber-50 rounded-lg p-4 border border-yellow-200">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Crown className="w-5 h-5 text-yellow-600" />
+                      <h4 className="font-semibold text-gray-900">Module Leader</h4>
+                    </div>
+                    <div className="space-y-1 text-sm">
+                      <p className="font-medium text-gray-900">{subject.moduleLeader.fullName}</p>
+                      <div className="flex items-center gap-1 text-gray-600">
+                        <Mail className="w-3 h-3" />
+                        {subject.moduleLeader.email}
+                      </div>
+                      <p className="text-xs text-gray-600">
+                        ID: {subject.moduleLeader.teacherId} • {subject.moduleLeader.department}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRemoveModuleLeader?.();
+                    }}
+                    className="text-yellow-600 hover:bg-yellow-100 p-2 rounded-lg transition"
+                    title="Remove module leader"
+                  >
+                    <Trash className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="mt-3 pt-3 border-t border-yellow-200">
+                  <p className="text-xs text-yellow-800">
+                    <strong>Note:</strong> Module leader can create main assignments for all students in this semester.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Description */}
             {subject.description && (
               <div>
@@ -208,7 +327,9 @@ export default function SubjectCard({
                   <AlertCircle className="w-4 h-4" />
                   Description
                 </h4>
-                <p className="text-sm text-gray-600 bg-white rounded-lg p-3 border border-gray-200">{subject.description}</p>
+                <p className="text-sm text-gray-600 bg-white rounded-lg p-3 border border-gray-200">
+                  {subject.description}
+                </p>
               </div>
             )}
 
@@ -249,13 +370,27 @@ export default function SubjectCard({
                             {teacher.fullName?.charAt(0).toUpperCase()}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <h5 className="font-semibold text-gray-900">{teacher.fullName}</h5>
-                            <p className="text-xs text-gray-600 mt-0.5">{teacher.teacherId} • {teacher.department}</p>
+                            <div className="flex items-center gap-2">
+                              <h5 className="font-semibold text-gray-900">{teacher.fullName}</h5>
+                              {teacher.isModuleLeader && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded text-xs font-medium">
+                                  <Crown className="w-3 h-3" />
+                                  Leader
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-gray-600 mt-0.5">
+                              {teacher.teacherId} • {teacher.department}
+                            </p>
                             <div className="flex items-center gap-1 text-xs text-gray-500 mt-1">
                               <Mail className="w-3 h-3" />
                               {teacher.email}
                             </div>
-                            {teacher.specialization && <p className="text-xs text-purple-600 mt-1">Specialization: {teacher.specialization}</p>}
+                            {teacher.specialization && (
+                              <p className="text-xs text-purple-600 mt-1">
+                                Specialization: {teacher.specialization}
+                              </p>
+                            )}
                           </div>
                         </div>
                         <button
@@ -277,7 +412,10 @@ export default function SubjectCard({
                           <p className="text-xs font-medium text-gray-700 mb-2">Teaching Groups:</p>
                           <div className="flex flex-wrap gap-2">
                             {teacher.groupsAssigned.map((group) => (
-                              <span key={group._id} className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium">
+                              <span 
+                                key={group._id} 
+                                className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium"
+                              >
                                 {group.name} ({group.studentCount} students)
                               </span>
                             ))}
@@ -321,12 +459,18 @@ export default function SubjectCard({
                       <div className="flex justify-between items-start">
                         <div>
                           <h5 className="font-semibold text-gray-900 text-sm">{group.name}</h5>
-                          <p className="text-xs text-gray-600 mt-1">{group.studentCount || 0}/{group.capacity || 0} students</p>
+                          <p className="text-xs text-gray-600 mt-1">
+                            {group.studentCount || 0}/{group.capacity || 0} students
+                          </p>
                         </div>
                         {group.teacherId ? (
-                          <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-medium">Assigned</span>
+                          <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-medium">
+                            Assigned
+                          </span>
                         ) : (
-                          <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded text-xs font-medium">Unassigned</span>
+                          <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded text-xs font-medium">
+                            Unassigned
+                          </span>
                         )}
                       </div>
                     </div>
@@ -362,5 +506,3 @@ export default function SubjectCard({
     </div>
   );
 }
-
-

@@ -22,7 +22,7 @@ import ProfileSetup from './pages/Student/Studentprofilepage';
 // teacher 
 
 import TeacherDashboard from './pages/Teacher/Teacherdashboard'; 
-
+import TeacherAssignments from './pages/Teacher/Teacherassignement';
 
 //admin
 import AdminDashboardPage from './pages/Admin/Admindashboard';
@@ -143,6 +143,15 @@ function App() {
             element={
               <ProtectedRoute role="teacher">
                 <TeacherDashboard />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/teacher/assignments"
+            element={
+              <ProtectedRoute role="teacher">
+                <TeacherAssignments />
               </ProtectedRoute>
             }
           />

@@ -6,12 +6,8 @@ export interface IGroup extends Document {
   academicYear: number;
   capacity: number;
   studentCount: number;
-  students: [
-  {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Student", 
-  },
-], 
+  // FIXED: Changed from array syntax to mongoose.Types.ObjectId[]
+  students: mongoose.Types.ObjectId[];
   subjectTeachers: {
     subjectId: mongoose.Types.ObjectId;
     teacherId: mongoose.Types.ObjectId;
@@ -50,6 +46,12 @@ groupSchema.pre("save", function (next) {
   this.studentCount = this.students?.length || 0;
   next();
 });
+
+// Indexes for better query performance
+groupSchema.index({ semester: 1, isActive: 1 });
+groupSchema.index({ academicYear: 1 });
+groupSchema.index({ "subjectTeachers.subjectId": 1 });
+groupSchema.index({ "subjectTeachers.teacherId": 1 });
 
 // Compound unique index: one group per semester per year
 groupSchema.index({ name: 1, semester: 1, academicYear: 1 }, { unique: true });
