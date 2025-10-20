@@ -5,7 +5,14 @@ import { upload } from "../middleware/uploadMiddleware";
 // Dashboard
 import { getTeacherDashboard } from "../controllers/Teacher/dashboardController";
 
-// Assignment Management (from your assignment controller)
+// Profile & Workload
+import {
+  getTeacherProfile,
+  getMyWorkload,
+  getMySubjects
+} from "../controllers/Teacher/Teacherprofilecontroller.js";
+
+// Assignment Management
 import {
   createAssignment,
   getMyAssignments,
@@ -15,7 +22,7 @@ import {
   getMyAssignmentStatistics
 } from "../controllers/Teacher/assignmentController";
 
-// Submission & Grading (from your assignment controller)
+// Submission & Grading
 import {
   getSubmissionsForGrading,
   gradeSubmission
@@ -48,9 +55,21 @@ const router = express.Router();
 router.get("/dashboard", protect, teacherOnly, getTeacherDashboard);
 
 /* ============================================================
+ 👤 PROFILE & WORKLOAD
+============================================================ */
+// Get logged-in teacher's full profile with subjects & groups
+router.get("/profile", protect, teacherOnly, getTeacherProfile);
+
+// Get teacher's workload statistics
+router.get("/workload", protect, teacherOnly, getMyWorkload);
+
+// Get teacher's assigned subjects and groups
+router.get("/subjects", protect, teacherOnly, getMySubjects);
+
+/* ============================================================
  📘 ASSIGNMENT MANAGEMENT
 ============================================================ */
-// Statistics
+// Get assignment statistics for dashboard
 router.get("/assignments/statistics", protect, teacherOnly, getMyAssignmentStatistics);
 
 // Create assignment (Main = Module Leader, Weekly = Regular Teacher)
