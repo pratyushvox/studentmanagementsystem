@@ -42,7 +42,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     { id: "dashboard", label: "Dashboard", icon: Home, path: "/teacher/dashboard" },
 
     { id: "assignments", label: "Assignments", icon: FileText, path: "/teacher/assignments" },
-    { id: "attendance", label: "Attendance", icon: Calendar, path: "/teacher/attendance" },
+    { id: "submission", label: "Submission", icon: Calendar, path: "/teacher/submission" },
     { id: "grades", label: "Grades", icon: BarChart3, path: "/teacher/grades" },
     { id: "settings", label: "Settings", icon: Settings, path: "/teacher/settings" },
   ];
