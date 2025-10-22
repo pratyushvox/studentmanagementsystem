@@ -74,44 +74,19 @@ export const createAssignment = async (req: Request, res: Response) => {
         postedToAllStudents: true
       });
 
-      // Create submission records for all students in all groups
-      let submissionCount = 0;
-      for (const group of allGroups) {
-        if (!group.students || group.students.length === 0) continue;
-
-        const students = await Student.find({ _id: { $in: group.students } });
-        
-        // Find the teacher assigned to this group for this subject
-        const groupTeacherAssignment = group.subjectTeachers?.find(
-          st => st.subjectId.toString() === subjectId
-        );
-
-        const assignedTeacherId = groupTeacherAssignment?.teacherId || teacher._id;
-
-        for (const student of students) {
-          await Submission.create({
-            assignmentId: assignment._id,
-            studentId: student._id,
-            groupId: group._id,
-            subjectId,
-            fileUrl: "", // Will be filled when student submits
-            status: "pending",
-            assignedTeacherId // Teacher who will grade this submission
-          });
-          submissionCount++;
-        }
-      }
+      // REMOVED: Automatic creation of submission records
+      // Submission records will be created when students actually submit
 
       const populatedAssignment = await Assignment.findById(assignment._id)
         .populate("subjectId", "name code")
         .populate("groups", "name semester");
 
       return res.status(201).json({ 
-        message: `Main assignment created successfully and posted to ${submissionCount} students across ${allGroups.length} groups`,
+        message: `Main assignment created successfully for ${allGroups.length} groups`,
         assignment: populatedAssignment,
         stats: {
           groupsCount: allGroups.length,
-          studentsCount: submissionCount
+          studentsCount: 0 // No submissions created yet
         }
       });
     } 
@@ -175,38 +150,19 @@ export const createAssignment = async (req: Request, res: Response) => {
         postedToAllStudents: false
       });
 
-      // Create submission records only for students in the specified groups
-      let submissionCount = 0;
-      for (const groupId of groupIds) {
-        const group = await Group.findById(groupId);
-        if (!group || !group.students || group.students.length === 0) continue;
-
-        const students = await Student.find({ _id: { $in: group.students } });
-        
-        for (const student of students) {
-          await Submission.create({
-            assignmentId: assignment._id,
-            studentId: student._id,
-            groupId: group._id,
-            subjectId,
-            fileUrl: "",
-            status: "pending",
-            assignedTeacherId: teacher._id // This teacher grades their own weekly assignments
-          });
-          submissionCount++;
-        }
-      }
+      // REMOVED: Automatic creation of submission records
+      // Submission records will be created when students actually submit
 
       const populatedAssignment = await Assignment.findById(assignment._id)
         .populate("subjectId", "name code")
         .populate("groups", "name semester");
 
       return res.status(201).json({ 
-        message: `Weekly assignment created successfully and posted to ${submissionCount} students`,
+        message: `Weekly assignment created successfully for ${groupIds.length} groups`,
         assignment: populatedAssignment,
         stats: {
           groupsCount: groupIds.length,
-          studentsCount: submissionCount
+          studentsCount: 0 // No submissions created yet
         }
       });
     }
@@ -218,6 +174,7 @@ export const createAssignment = async (req: Request, res: Response) => {
     res.status(500).json({ message: err.message });
   }
 };
+  
 
 // Get all assignments by teacher
 export const getMyAssignments = async (req: Request, res: Response) => {

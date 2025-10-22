@@ -26,6 +26,7 @@ import {
 // Submissions
 import {
   submitAssignment,
+  resubmitAssignment, // ADD THIS IMPORT
   getMySubmissions,
   getSubmissionById
 } from "../controllers/Student/submissioncontroller";
@@ -69,6 +70,15 @@ router.post(
   upload.single("file"),
   submitAssignment
 );
+
+// ADD THIS NEW ROUTE FOR RESUBMISSION
+router.post(
+  "/assignments/resubmit",
+  protect,
+  upload.single("file"),
+  resubmitAssignment
+);
+
 router.get("/submissions", protect, getMySubmissions);
 router.get("/submissions/:submissionId", protect, getSubmissionById);
 
@@ -78,9 +88,9 @@ router.get("/submissions/:submissionId", protect, getSubmissionById);
 router.get("/posts", protect, getPostsForStudent);
 router.get("/posts/:postId", protect, getPostById);
 
-
-// notice 
-router.get("/notice", protect, getStudentNotices)
+// ============================================================
+// NOTICES
+// ============================================================
+router.get("/notice", protect, getStudentNotices);
 
 export default router;
-

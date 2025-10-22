@@ -6,6 +6,8 @@ import StatsCard from '../../components/Cardstats';
 import { SubmissionCard } from '../../components/Submissioncard';
 import UserFormModal from '../../components/Userformmodal';
 import { useApiGet, useApiPatch } from '../../hooks/useApi';
+import { toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 const TeacherGradingDashboard = () => {
   const [activeItem, setActiveItem] = useState('grading');
@@ -23,13 +25,15 @@ const TeacherGradingDashboard = () => {
   // Fetch teacher's assigned subjects
   const { 
     data: subjectsData, 
-    loading: subjectsLoading 
+    loading: subjectsLoading,
+    error: subjectsError 
   } = useApiGet('/teacher/subjects', { autoFetch: true });
 
   // Fetch submissions for grading
   const { 
     data: submissionsData, 
     loading: submissionsLoading,
+    error: submissionsError,
     refetch: refetchSubmissions 
   } = useApiGet('/teacher/submissions/for-grading', { autoFetch: true });
 
@@ -40,17 +44,51 @@ const TeacherGradingDashboard = () => {
   } = useApiPatch({
     onSuccess: (data) => {
       console.log('Graded successfully:', data);
+      toast.success('Submission graded successfully!', {
+        position: "top-right",
+        autoClose: 3000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+      });
       refetchSubmissions(); // Refresh submissions list
       setGradeModal(false);
       setGradeFormData({ marks: '', feedback: '' });
       setSelectedSubmission(null);
     },
     onError: (error) => {
-      alert(`Error grading submission: ${error}`);
+      toast.error(`Error grading submission: ${error}`, {
+        position: "top-right",
+        autoClose: 5000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+      });
     }
   });
 
-  // Extract teacher assignments from subjects data - FIXED to use assignedSubjects
+  // Show error toasts for API errors
+  useEffect(() => {
+    if (subjectsError) {
+      toast.error(`Failed to load subjects: ${subjectsError}`, {
+        position: "top-right",
+        autoClose: 5000,
+      });
+    }
+  }, [subjectsError]);
+
+  useEffect(() => {
+    if (submissionsError) {
+      toast.error(`Failed to load submissions: ${submissionsError}`, {
+        position: "top-right",
+        autoClose: 5000,
+      });
+    }
+  }, [submissionsError]);
+
+  // Extract teacher assignments from subjects data
   const teacherAssignments = subjectsData?.assignedSubjects?.map(assignment => ({
     subjectId: assignment.subjectId._id,
     subjectName: assignment.subjectId.name,
@@ -144,11 +182,26 @@ const TeacherGradingDashboard = () => {
     const marks = parseFloat(gradeFormData.marks);
     
     if (isNaN(marks) || marks < 0 || marks > selectedSubmission.maxMarks) {
-      alert(`Marks must be between 0 and ${selectedSubmission.maxMarks}`);
+      toast.warning(`Marks must be between 0 and ${selectedSubmission.maxMarks}`, {
+        position: "top-right",
+        autoClose: 4000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+      });
       return;
     }
 
-    await gradeSubmissionApi(`/api/teacher/submissions/${selectedSubmission.id}/grade`, {
+    if (marks < 0 || marks > selectedSubmission.maxMarks) {
+      toast.warning(`Marks must be between 0 and ${selectedSubmission.maxMarks}`, {
+        position: "top-right",
+        autoClose: 4000,
+      });
+      return;
+    }
+
+    await gradeSubmissionApi(`/teacher/submissions/${selectedSubmission.id}/grade`, {
       marks: marks,
       feedback: gradeFormData.feedback || ''
     });
@@ -171,16 +224,41 @@ const TeacherGradingDashboard = () => {
       label: `Marks (out of ${selectedSubmission.maxMarks})`,
       type: 'number',
       placeholder: 'Enter marks',
-      required: true
+      required: true,
+      min: 0,
+      max: selectedSubmission.maxMarks
     },
     {
       name: 'feedback',
       label: 'Feedback',
-      type: 'text',
+      type: 'textarea',
       placeholder: 'Provide constructive feedback to the student...',
-      required: false
+      required: false,
+      rows: 4
     }
   ] : [];
+
+  // Handle tab change with notification
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    toast.info(`Showing ${tab === 'weekly' ? 'Weekly Submissions' : 'Main Assignments'}`, {
+      position: "top-right",
+      autoClose: 2000,
+      hideProgressBar: true,
+    });
+  };
+
+  // Handle filter changes with notification
+  const handleFilterStatus = (status) => {
+    setFilterStatus(status);
+    if (status !== 'all') {
+      toast.info(`Filtering by ${status} submissions`, {
+        position: "top-right",
+        autoClose: 2000,
+        hideProgressBar: true,
+      });
+    }
+  };
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
@@ -214,7 +292,7 @@ const TeacherGradingDashboard = () => {
           )}
 
           {/* Error State */}
-          {!submissionsLoading && !submissionsData && (
+          {!submissionsLoading && submissionsError && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
               <div className="flex items-center gap-2 text-red-800">
                 <AlertCircle className="w-5 h-5" />
@@ -266,7 +344,7 @@ const TeacherGradingDashboard = () => {
                 <div className="border-b border-gray-200">
                   <div className="flex">
                     <button
-                      onClick={() => setActiveTab('weekly')}
+                      onClick={() => handleTabChange('weekly')}
                       className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors ${
                         activeTab === 'weekly'
                           ? 'border-indigo-600 text-indigo-600'
@@ -276,7 +354,7 @@ const TeacherGradingDashboard = () => {
                       Weekly Submissions
                     </button>
                     <button
-                      onClick={() => setActiveTab('main')}
+                      onClick={() => handleTabChange('main')}
                       className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors ${
                         activeTab === 'main'
                           ? 'border-indigo-600 text-indigo-600'
@@ -355,7 +433,7 @@ const TeacherGradingDashboard = () => {
                     </div>
                     <div className="flex gap-2">
                       <button
-                        onClick={() => setFilterStatus('all')}
+                        onClick={() => handleFilterStatus('all')}
                         className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                           filterStatus === 'all'
                             ? 'bg-indigo-600 text-white'
@@ -365,7 +443,7 @@ const TeacherGradingDashboard = () => {
                         All
                       </button>
                       <button
-                        onClick={() => setFilterStatus('pending')}
+                        onClick={() => handleFilterStatus('pending')}
                         className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                           filterStatus === 'pending'
                             ? 'bg-yellow-600 text-white'
@@ -375,7 +453,7 @@ const TeacherGradingDashboard = () => {
                         Pending
                       </button>
                       <button
-                        onClick={() => setFilterStatus('graded')}
+                        onClick={() => handleFilterStatus('graded')}
                         className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                           filterStatus === 'graded'
                             ? 'bg-green-600 text-white'
@@ -406,7 +484,14 @@ const TeacherGradingDashboard = () => {
                       <SubmissionCard
                         key={submission.id}
                         submission={submission}
-                        onViewFile={() => window.open(submission.fileUrl, '_blank')}
+                        onViewFile={() => {
+                          window.open(submission.fileUrl, '_blank');
+                          toast.info('Opening submission file...', {
+                            position: "top-right",
+                            autoClose: 2000,
+                            hideProgressBar: true,
+                          });
+                        }}
                         onGrade={() => openGradeModal(submission)}
                       />
                     ))
@@ -425,6 +510,11 @@ const TeacherGradingDashboard = () => {
           setGradeModal(false);
           setSelectedSubmission(null);
           setGradeFormData({ marks: '', feedback: '' });
+          toast.info('Grading cancelled', {
+            position: "top-right",
+            autoClose: 2000,
+            hideProgressBar: true,
+          });
         }}
         onSubmit={handleGradeSubmission}
         title={`Grade Submission - ${selectedSubmission?.studentName || ''}`}

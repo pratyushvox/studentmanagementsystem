@@ -36,16 +36,24 @@ export const getAssignmentsForStudent = async (req: Request, res: Response) => {
       .populate("subjectId", "name code credits")
       .sort({ deadline: 1 });
 
-    // Get submitted assignment IDs
-    const submittedIds = await Submission.find({ 
-      studentId: student._id 
-    }).distinct("assignmentId");
+    // Get submitted assignment IDs - ONLY those with actual file submissions
+    const submissions = await Submission.find({ 
+      studentId: student._id,
+      fileUrl: { $ne: "" } // Only count submissions with actual files
+    });
+    
+    const submittedIds = submissions.map(s => s.assignmentId.toString());
 
     const assignmentsWithStatus = assignments.map((assignment) => {
       const isSubmitted = submittedIds.some(
         id => id.toString() === assignment._id.toString()
       );
       const isOverdue = new Date() > new Date(assignment.deadline);
+      
+      // Find the actual submission for this assignment (if exists)
+      const submission = submissions.find(
+        s => s.assignmentId.toString() === assignment._id.toString()
+      );
 
       return {
         ...assignment.toObject(),
@@ -54,7 +62,9 @@ export const getAssignmentsForStudent = async (req: Request, res: Response) => {
         canSubmit: !isSubmitted && !isOverdue,
         daysLeft: Math.ceil(
           (new Date(assignment.deadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
-        )
+        ),
+        // Include submission data if it exists
+        submission: submission || null
       };
     });
 
@@ -106,20 +116,29 @@ export const getAssignmentById = async (req: Request, res: Response) => {
       });
     }
 
+    // Find submission - only consider it as "submitted" if it has a file
     const submission = await Submission.findOne({
       assignmentId,
-      studentId: student._id
+      studentId: student._id,
+      fileUrl: { $ne: "" } // Only count submissions with actual files
     });
 
     const isOverdue = new Date() > new Date(assignment.deadline);
+    
+    // Check if there's any submission record (even empty) for this assignment
+    const anySubmissionRecord = await Submission.findOne({
+      assignmentId,
+      studentId: student._id
+    });
 
     res.json({
       message: "Assignment details fetched",
       assignment,
       submission: submission || null,
-      isSubmitted: !!submission,
+      isSubmitted: !!submission, 
       isOverdue,
-      canSubmit: !submission && !isOverdue
+      canSubmit: !submission && !isOverdue, 
+      hasSubmissionRecord: !!anySubmissionRecord 
     });
   } catch (err: any) {
     res.status(500).json({ message: err.message });

@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Calendar, Clock, FileText, CheckCircle, AlertCircle, Search, Download, Upload } from 'lucide-react';
+import { Calendar, Clock, FileText, CheckCircle, AlertCircle, Search, Download, Upload, RefreshCw } from 'lucide-react';
 import Navbar from '../../components/Navbar';
 import Sidebar from '../../components/Sidebar';
 import StatsCard from '../../components/Cardstats';
 import SubmitAssignmentModal from '../../components/Submitassigmentmodal';
 import { LoadingSpinner, ErrorDisplay, EmptyState } from '../../components/Loadingerror';
+import { useApiGet, useApiUpload } from '../../hooks/useApi';
 
 const API_BASE_URL = "http://localhost:5000/api";
 
@@ -28,6 +29,7 @@ interface Assignment {
   isSubmitted: boolean;
   isOverdue: boolean;
   canSubmit: boolean;
+  submission?: Submission | null;
 }
 
 interface Submission {
@@ -39,6 +41,8 @@ interface Submission {
   feedback?: string;
   createdAt: string;
   updatedAt: string;
+  status: string;
+  submittedAt: string;
 }
 
 export default function StudentAssignmentsPage() {
@@ -47,91 +51,80 @@ export default function StudentAssignmentsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [assignments, setAssignments] = useState<Assignment[]>([]);
-  const [submissions, setSubmissions] = useState<Submission[]>([]);
-  const [submitting, setSubmitting] = useState(false);
+  const [isResubmitting, setIsResubmitting] = useState(false);
+
+  // Use custom hooks for API calls
+  const { 
+    data: assignmentsData, 
+    loading: assignmentsLoading, 
+    error: assignmentsError, 
+    execute: fetchAssignments 
+  } = useApiGet('/student/assignments');
+
+  const { 
+    data: submissionsData, 
+    loading: submissionsLoading, 
+    error: submissionsError, 
+    execute: fetchSubmissions 
+  } = useApiGet('/student/submissions');
+
+  const { 
+    upload: submitAssignmentApi, 
+    loading: submitting, 
+    error: submitError,
+    reset: resetSubmit 
+  } = useApiUpload();
+
+  const loading = assignmentsLoading || submissionsLoading;
+  const error = assignmentsError || submissionsError;
 
   useEffect(() => {
     fetchData();
   }, []);
 
   const fetchData = async () => {
-    try {
-      setLoading(true);
-      const token = localStorage.getItem("token");
-
-      // Fetch assignments
-      const assignmentsRes = await fetch(`${API_BASE_URL}/student/assignments`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      const assignmentsData = await assignmentsRes.json();
-
-      if (!assignmentsRes.ok) {
-        throw new Error(assignmentsData.message || 'Failed to fetch assignments');
-      }
-
-      // Fetch submissions
-      const submissionsRes = await fetch(`${API_BASE_URL}/student/submissions`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      const submissionsData = await submissionsRes.json();
-
-      if (!submissionsRes.ok) {
-        throw new Error(submissionsData.message || 'Failed to fetch submissions');
-      }
-
-      setAssignments(assignmentsData.assignments || []);
-      setSubmissions(submissionsData.submissions || []);
-      setError(null);
-    } catch (err: any) {
-      setError(err.message);
-      console.error("Error fetching data:", err);
-    } finally {
-      setLoading(false);
-    }
+    await fetchAssignments();
+    await fetchSubmissions();
   };
 
   const handleSubmitAssignment = async (assignment: Assignment, file: File) => {
     try {
-      setSubmitting(true);
-      const token = localStorage.getItem("token");
       const formData = new FormData();
-      
       formData.append('assignmentId', assignment._id);
       formData.append('file', file);
 
-      const response = await fetch(`${API_BASE_URL}/student/assignments/submit`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: formData,
-      });
+      const endpoint = isResubmitting 
+        ? '/student/assignments/resubmit'
+        : '/student/assignments/submit';
 
-      const data = await response.json();
+      const result = await submitAssignmentApi(endpoint, formData);
 
-      if (!response.ok) {
-        throw new Error(data.message || 'Failed to submit assignment');
+      if (result) {
+        alert(`Assignment "${assignment.title}" ${isResubmitting ? 'resubmitted' : 'submitted'} successfully!`);
+        setShowUploadModal(false);
+        setSelectedAssignment(null);
+        setIsResubmitting(false);
+        resetSubmit();
+        
+        // Refresh data
+        await fetchData();
       }
-
-      alert(`Assignment "${assignment.title}" submitted successfully!`);
-      setShowUploadModal(false);
-      setSelectedAssignment(null);
-      
-      // Refresh data
-      await fetchData();
     } catch (err: any) {
-      console.error("Error submitting assignment:", err);
-      alert(`Failed to submit assignment: ${err.message}`);
-    } finally {
-      setSubmitting(false);
+      console.error(`Error ${isResubmitting ? 'resubmitting' : 'submitting'} assignment:`, err);
+      alert(`Failed to ${isResubmitting ? 'resubmit' : 'submit'} assignment: ${err.message}`);
     }
+  };
+
+  const handleResubmitAssignment = (assignment: Assignment) => {
+    setSelectedAssignment(assignment);
+    setIsResubmitting(true);
+    setShowUploadModal(true);
+  };
+
+  const handleNewSubmitAssignment = (assignment: Assignment) => {
+    setSelectedAssignment(assignment);
+    setIsResubmitting(false);
+    setShowUploadModal(true);
   };
 
   const getDaysRemaining = (deadline: string): string => {
@@ -147,12 +140,15 @@ export default function StudentAssignmentsPage() {
   };
 
   const getStatusInfo = (assignment: Assignment) => {
-    if (assignment.isOverdue && !assignment.isSubmitted) {
+    const submission = getSubmissionForAssignment(assignment._id);
+    const hasSubmission = !!submission && submission.fileUrl && submission.fileUrl !== "";
+    
+    if (assignment.isOverdue && !hasSubmission) {
       return { status: 'overdue', label: 'Overdue', color: 'text-red-600 bg-red-50' };
     }
-    if (assignment.isSubmitted) {
-      const submission = submissions.find(s => s.assignmentId === assignment._id);
-      if (submission?.grade !== undefined && submission?.grade !== null) {
+    if (hasSubmission) {
+      const isGraded = submission?.status === 'graded' || (submission?.grade !== undefined && submission?.grade !== null);
+      if (isGraded) {
         return { status: 'graded', label: 'Graded', color: 'text-green-600 bg-green-50' };
       }
       return { status: 'submitted', label: 'Submitted', color: 'text-purple-600 bg-purple-50' };
@@ -176,10 +172,31 @@ export default function StudentAssignmentsPage() {
   };
 
   const getSubmissionForAssignment = (assignmentId: string): Submission | undefined => {
-    return submissions.find(s => s.assignmentId === assignmentId);
+    const submissions = submissionsData?.submissions || [];
+    return submissions.find((s: Submission) => 
+      s.assignmentId === assignmentId && s.fileUrl && s.fileUrl !== ""
+    );
   };
 
-  const filteredAssignments = assignments.filter(assignment => {
+  // Check if assignment has been submitted
+  const hasSubmission = (assignment: Assignment): boolean => {
+    const submission = getSubmissionForAssignment(assignment._id);
+    return !!submission && submission.fileUrl && submission.fileUrl !== "";
+  };
+
+  // Check if assignment can be resubmitted (already submitted but not graded)
+  const canResubmit = (assignment: Assignment): boolean => {
+    const submission = getSubmissionForAssignment(assignment._id);
+    const isGraded = submission?.status === 'graded' || (submission?.grade !== undefined && submission?.grade !== null);
+    const isOverdue = new Date() > new Date(assignment.deadline);
+    
+    return hasSubmission(assignment) && !isGraded && !isOverdue;
+  };
+
+  const assignments = assignmentsData?.assignments || [];
+  const submissions = submissionsData?.submissions || [];
+
+  const filteredAssignments = assignments.filter((assignment: Assignment) => {
     const statusInfo = getStatusInfo(assignment);
     const matchesTab = activeTab === 'all' || statusInfo.status === activeTab;
     const matchesSearch = assignment.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -208,12 +225,12 @@ export default function StudentAssignmentsPage() {
     return <ErrorDisplay error={error} onRetry={fetchData} title="Error Loading Assignments" />;
   }
 
-  // Count assignments by status
-  const upcomingCount = assignments.filter(a => getStatusInfo(a).status === 'upcoming').length;
-  const pendingCount = assignments.filter(a => getStatusInfo(a).status === 'pending').length;
-  const submittedCount = assignments.filter(a => getStatusInfo(a).status === 'submitted').length;
-  const gradedCount = assignments.filter(a => getStatusInfo(a).status === 'graded').length;
-  const overdueCount = assignments.filter(a => getStatusInfo(a).status === 'overdue').length;
+  // Count assignments by status using the new logic
+  const upcomingCount = assignments.filter((a: Assignment) => getStatusInfo(a).status === 'upcoming').length;
+  const pendingCount = assignments.filter((a: Assignment) => getStatusInfo(a).status === 'pending').length;
+  const submittedCount = assignments.filter((a: Assignment) => getStatusInfo(a).status === 'submitted').length;
+  const gradedCount = assignments.filter((a: Assignment) => getStatusInfo(a).status === 'graded').length;
+  const overdueCount = assignments.filter((a: Assignment) => getStatusInfo(a).status === 'overdue').length;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -356,10 +373,12 @@ export default function StudentAssignmentsPage() {
               description="Try adjusting your filters or check back later"
             />
           ) : (
-            filteredAssignments.map((assignment) => {
+            filteredAssignments.map((assignment: Assignment) => {
               const statusInfo = getStatusInfo(assignment);
               const priorityInfo = getPriorityInfo(assignment);
               const submission = getSubmissionForAssignment(assignment._id);
+              const hasSubmission = !!submission;
+              const canResubmitAssignment = canResubmit(assignment);
 
               return (
                 <div key={assignment._id} className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
@@ -410,7 +429,7 @@ export default function StudentAssignmentsPage() {
                         <div className="mt-3 pt-3 border-t border-gray-200">
                           <div className="flex flex-col gap-2 text-sm">
                             <span className="text-gray-600">
-                              Submitted: {new Date(submission.createdAt).toLocaleDateString()} at {new Date(submission.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              Submitted: {new Date(submission.submittedAt).toLocaleDateString()} at {new Date(submission.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </span>
                             {submission.grade !== undefined && submission.grade !== null && (
                               <span className="text-gray-600">
@@ -441,37 +460,54 @@ export default function StudentAssignmentsPage() {
                     </div>
 
                     {/* Action Button */}
-                    <div className="flex-shrink-0">
-                      {assignment.canSubmit && (
+                    <div className="flex flex-col items-end gap-3">
+                      {!hasSubmission && assignment.canSubmit && (
                         <button
-                          onClick={() => {
-                            setSelectedAssignment(assignment);
-                            setShowUploadModal(true);
-                          }}
+                          onClick={() => handleNewSubmitAssignment(assignment)}
                           className="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700 transition-colors flex items-center gap-2"
                         >
                           <Upload className="w-4 h-4" />
                           Submit
                         </button>
                       )}
-                      {assignment.isSubmitted && !submission?.grade && (
-                        <div className="flex items-center gap-2 text-purple-600 text-sm">
-                          <CheckCircle className="w-5 h-5" />
-                          <span className="font-medium">Submitted</span>
+                      
+                      {canResubmitAssignment && (
+                        <button
+                          onClick={() => handleResubmitAssignment(assignment)}
+                          className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
+                        >
+                          <RefreshCw className="w-4 h-4" />
+                          Resubmit
+                        </button>
+                      )}
+                      
+                      {hasSubmission && !canResubmitAssignment && statusInfo.status === 'submitted' && (
+                        <div className="flex flex-col items-center gap-2 text-purple-600">
+                          <CheckCircle className="w-6 h-6" />
+                          <span className="font-medium text-sm">Submitted</span>
+                          <span className="text-xs text-gray-500">Waiting for grading</span>
                         </div>
                       )}
-                      {submission?.grade !== undefined && submission?.grade !== null && (
-                        <div className="flex flex-col items-end gap-2">
-                          <div className="flex items-center gap-2 text-green-600 text-sm">
-                            <CheckCircle className="w-5 h-5" />
-                            <span className="font-medium">Graded</span>
+                      
+                      {statusInfo.status === 'graded' && (
+                        <div className="flex flex-col items-center gap-2">
+                          <div className="flex items-center gap-2 text-green-600">
+                            <CheckCircle className="w-6 h-6" />
+                            <span className="font-medium text-sm">Graded</span>
                           </div>
+                          {submission?.grade !== undefined && submission?.grade !== null && (
+                            <span className="text-lg font-bold text-gray-900">
+                              {submission.grade}%
+                            </span>
+                          )}
                         </div>
                       )}
-                      {assignment.isOverdue && !assignment.isSubmitted && (
-                        <div className="flex items-center gap-2 text-red-600 text-sm">
-                          <AlertCircle className="w-5 h-5" />
-                          <span className="font-medium">Overdue</span>
+                      
+                      {statusInfo.status === 'overdue' && (
+                        <div className="flex flex-col items-center gap-2 text-red-600">
+                          <AlertCircle className="w-6 h-6" />
+                          <span className="font-medium text-sm">Overdue</span>
+                          <span className="text-xs text-gray-500">Submission closed</span>
                         </div>
                       )}
                     </div>
@@ -491,9 +527,12 @@ export default function StudentAssignmentsPage() {
           onClose={() => {
             setShowUploadModal(false);
             setSelectedAssignment(null);
+            setIsResubmitting(false);
+            resetSubmit();
           }}
           onSubmit={handleSubmitAssignment}
           isSubmitting={submitting}
+          isResubmit={isResubmitting}
         />
       )}
     </div>
