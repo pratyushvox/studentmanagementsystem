@@ -7,7 +7,9 @@ import {
   CheckCircle,
   Bell,
   ArrowRight,
-  Activity
+  Activity,
+  Crown,
+  Award
 } from 'lucide-react';
 
 import SubjectCardSimple from '../../components/subjectBlock';
@@ -52,6 +54,8 @@ const TeacherDashboard = () => {
   const submissionsStats = dashboard?.submissions || {};
   const postsStats = dashboard?.posts || {};
   const assignedSubjects = teacher?.assignedSubjects || [];
+  const moduleLeaderSubjects = teacher?.moduleLeaderSubjects || [];
+  const isModuleLeader = teacher?.isModuleLeader || false;
   const activities = activitiesData?.activities || [];
   const notices = noticesData?.data || [];
 
@@ -93,9 +97,17 @@ const TeacherDashboard = () => {
         <main className="flex-1 ml-64 p-6 overflow-y-auto">
           {/* Header */}
           <div className="mb-6">
-            <h1 className="text-3xl font-bold text-gray-900">
-              Welcome Back, {teacher.name || 'Teacher'} 👋
-            </h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-3xl font-bold text-gray-900">
+                Welcome Back, {teacher.name || 'Teacher'} 👋
+              </h1>
+              {isModuleLeader && (
+                <div className="flex items-center gap-1 px-3 py-1 bg-gradient-to-r from-amber-100 to-yellow-100 border-2 border-amber-300 rounded-full">
+                  <Crown className="w-4 h-4 text-amber-600" />
+                  <span className="text-xs font-semibold text-amber-700">Module Leader</span>
+                </div>
+              )}
+            </div>
             <p className="text-gray-600 mt-1">
               {teacher.department && `${teacher.department} • `}
               Teacher ID: {teacher.teacherId || 'N/A'}
@@ -142,6 +154,31 @@ const TeacherDashboard = () => {
             />
           </div>
 
+          {/* Module Leader Section - Compact Version */}
+          {isModuleLeader && moduleLeaderSubjects.length > 0 && (
+            <div className="mb-6 bg-gradient-to-r from-amber-50 to-yellow-50 rounded-lg border border-amber-200 p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Crown className="w-5 h-5 text-amber-600" />
+                <h2 className="text-lg font-semibold text-gray-900">Module Leadership</h2>
+              </div>
+              
+              <div className="flex flex-wrap gap-3">
+                {moduleLeaderSubjects.map((subject) => (
+                  <div 
+                    key={subject._id} 
+                    className="inline-flex items-center gap-2 bg-white rounded-lg px-3 py-2 border border-amber-200 hover:border-amber-300 hover:shadow-sm transition-all cursor-pointer"
+                  >
+                    <Award className="w-4 h-4 text-amber-600" />
+                    <div>
+                      <p className="font-medium text-gray-900 text-sm">{subject.name}</p>
+                      <p className="text-xs text-gray-500">{subject.code}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Main Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Left Section */}
@@ -187,7 +224,7 @@ const TeacherDashboard = () => {
               <div className="bg-white rounded-xl shadow-md p-6 border border-gray-200">
                 <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
                   <BookOpen className="w-5 h-5 text-indigo-600" />
-                  Your Subjects & Groups
+                  Teaching Assignments
                 </h2>
                 <div className="space-y-4">
                   {assignedSubjects.length > 0 ? (
@@ -200,7 +237,8 @@ const TeacherDashboard = () => {
                             name: subject.subjectId?.name || 'Unknown Subject',
                             code: subject.subjectId?.code || 'N/A'
                           },
-                          groups: subject.groups || []
+                          groups: subject.groups || [],
+                          semester: subject.semester
                         }}
                       />
                     ))

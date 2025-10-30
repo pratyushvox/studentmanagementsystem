@@ -6,8 +6,8 @@ import StatsCard from '../../components/Cardstats';
 import SubmitAssignmentModal from '../../components/Submitassigmentmodal';
 import { LoadingSpinner, ErrorDisplay, EmptyState } from '../../components/Loadingerror';
 import { useApiGet, useApiUpload } from '../../hooks/useApi';
-
-const API_BASE_URL = "http://localhost:5000/api";
+import { toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 interface Teacher {
   _id: string;
@@ -34,14 +34,14 @@ interface Assignment {
 
 interface Submission {
   _id: string;
-  assignmentId: string;
+  assignmentId: any; // Can be string or object with _id
   studentId: string;
   fileUrl: string;
-  grade?: number;
+  marks?: number;
   feedback?: string;
   createdAt: string;
   updatedAt: string;
-  status: string;
+  status: "pending" | "submitted" | "late" | "graded";
   submittedAt: string;
 }
 
@@ -52,67 +52,59 @@ export default function StudentAssignmentsPage() {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
   const [isResubmitting, setIsResubmitting] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Use custom hooks for API calls
   const { 
     data: assignmentsData, 
     loading: assignmentsLoading, 
     error: assignmentsError, 
-    execute: fetchAssignments 
-  } = useApiGet('/student/assignments');
+    refetch: fetchAssignments 
+  } = useApiGet('/student/assignments', { autoFetch: true });
 
   const { 
     data: submissionsData, 
     loading: submissionsLoading, 
     error: submissionsError, 
-    execute: fetchSubmissions 
-  } = useApiGet('/student/submissions');
+    refetch: fetchSubmissions 
+  } = useApiGet('/student/submissions', { autoFetch: true });
 
   const { 
     upload: submitAssignmentApi, 
-    loading: submitting, 
-    error: submitError,
-    reset: resetSubmit 
-  } = useApiUpload();
+    loading: submitting
+  } = useApiUpload({
+    onSuccess: (data) => {
+      const message = data?.message || (isResubmitting ? 'Assignment resubmitted successfully!' : 'Assignment submitted successfully!');
+      toast.success(message);
+      setShowUploadModal(false);
+      setSelectedAssignment(null);
+      setIsResubmitting(false);
+      
+      // Force refresh data with a small delay to ensure backend has updated
+      setTimeout(() => {
+        fetchAssignments();
+        fetchSubmissions();
+        setRefreshKey(prev => prev + 1);
+      }, 500);
+    },
+    onError: (err) => {
+      toast.error(err || `Failed to ${isResubmitting ? 'resubmit' : 'submit'} assignment`);
+    }
+  });
 
   const loading = assignmentsLoading || submissionsLoading;
   const error = assignmentsError || submissionsError;
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
-    await fetchAssignments();
-    await fetchSubmissions();
-  };
-
   const handleSubmitAssignment = async (assignment: Assignment, file: File) => {
-    try {
-      const formData = new FormData();
-      formData.append('assignmentId', assignment._id);
-      formData.append('file', file);
+    const formData = new FormData();
+    formData.append('assignmentId', assignment._id);
+    formData.append('file', file);
 
-      const endpoint = isResubmitting 
-        ? '/student/assignments/resubmit'
-        : '/student/assignments/submit';
+    const endpoint = isResubmitting 
+      ? '/student/assignments/resubmit'
+      : '/student/assignments/submit';
 
-      const result = await submitAssignmentApi(endpoint, formData);
-
-      if (result) {
-        alert(`Assignment "${assignment.title}" ${isResubmitting ? 'resubmitted' : 'submitted'} successfully!`);
-        setShowUploadModal(false);
-        setSelectedAssignment(null);
-        setIsResubmitting(false);
-        resetSubmit();
-        
-        // Refresh data
-        await fetchData();
-      }
-    } catch (err: any) {
-      console.error(`Error ${isResubmitting ? 'resubmitting' : 'submitting'} assignment:`, err);
-      alert(`Failed to ${isResubmitting ? 'resubmit' : 'submit'} assignment: ${err.message}`);
-    }
+    await submitAssignmentApi(endpoint, formData);
   };
 
   const handleResubmitAssignment = (assignment: Assignment) => {
@@ -139,25 +131,53 @@ export default function StudentAssignmentsPage() {
     return `${diffDays} days left`;
   };
 
+  // Get submission for assignment - handle both string and object assignmentId
+  const getSubmissionForAssignment = (assignmentId: string): Submission | undefined => {
+    const submissions = submissionsData?.submissions || [];
+    
+    const submission = submissions.find((s: Submission) => {
+      // Handle both string and object assignmentId
+      const submissionAssignmentId = typeof s.assignmentId === 'object' && s.assignmentId !== null
+        ? s.assignmentId._id 
+        : s.assignmentId;
+      
+      return submissionAssignmentId === assignmentId;
+    });
+    
+    return submission;
+  };
+
+  // Status detection based on your submission model
   const getStatusInfo = (assignment: Assignment) => {
     const submission = getSubmissionForAssignment(assignment._id);
-    const hasSubmission = !!submission && submission.fileUrl && submission.fileUrl !== "";
     
-    if (assignment.isOverdue && !hasSubmission) {
-      return { status: 'overdue', label: 'Overdue', color: 'text-red-600 bg-red-50' };
-    }
-    if (hasSubmission) {
-      const isGraded = submission?.status === 'graded' || (submission?.grade !== undefined && submission?.grade !== null);
-      if (isGraded) {
-        return { status: 'graded', label: 'Graded', color: 'text-green-600 bg-green-50' };
+    if (!submission || !submission.fileUrl || submission.fileUrl === "") {
+      // No submission or no file
+      const isOverdue = new Date() > new Date(assignment.deadline);
+      if (isOverdue) {
+        return { status: 'overdue', label: 'Overdue', color: 'text-red-600 bg-red-50' };
       }
-      return { status: 'submitted', label: 'Submitted', color: 'text-purple-600 bg-purple-50' };
+      
+      const daysLeft = Math.ceil((new Date(assignment.deadline).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+      if (daysLeft <= 2) {
+        return { status: 'pending', label: 'Pending', color: 'text-orange-600 bg-orange-50' };
+      }
+      return { status: 'upcoming', label: 'Upcoming', color: 'text-blue-600 bg-blue-50' };
     }
-    const daysLeft = Math.ceil((new Date(assignment.deadline).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-    if (daysLeft <= 2) {
-      return { status: 'pending', label: 'Pending', color: 'text-orange-600 bg-orange-50' };
+
+    // Has submission with file - check the actual status from database
+    switch (submission.status) {
+      case 'graded':
+        return { status: 'graded', label: 'Graded', color: 'text-green-600 bg-green-50' };
+      case 'late':
+        return { status: 'submitted', label: 'Late Submission', color: 'text-orange-600 bg-orange-50' };
+      case 'submitted':
+        return { status: 'submitted', label: 'Submitted', color: 'text-purple-600 bg-purple-50' };
+      case 'pending':
+        return { status: 'submitted', label: 'Submitted', color: 'text-purple-600 bg-purple-50' };
+      default:
+        return { status: 'submitted', label: 'Submitted', color: 'text-purple-600 bg-purple-50' };
     }
-    return { status: 'upcoming', label: 'Upcoming', color: 'text-blue-600 bg-blue-50' };
   };
 
   const getPriorityInfo = (assignment: Assignment) => {
@@ -171,26 +191,21 @@ export default function StudentAssignmentsPage() {
     return { priority: 'low', label: 'Low Priority', color: 'text-green-600 bg-green-50 border-green-200' };
   };
 
-  const getSubmissionForAssignment = (assignmentId: string): Submission | undefined => {
-    const submissions = submissionsData?.submissions || [];
-    return submissions.find((s: Submission) => 
-      s.assignmentId === assignmentId && s.fileUrl && s.fileUrl !== ""
-    );
-  };
-
   // Check if assignment has been submitted
   const hasSubmission = (assignment: Assignment): boolean => {
     const submission = getSubmissionForAssignment(assignment._id);
-    return !!submission && submission.fileUrl && submission.fileUrl !== "";
+    return !!submission && !!submission.fileUrl && submission.fileUrl !== "";
   };
 
-  // Check if assignment can be resubmitted (already submitted but not graded)
+  // Check if assignment can be resubmitted
   const canResubmit = (assignment: Assignment): boolean => {
     const submission = getSubmissionForAssignment(assignment._id);
-    const isGraded = submission?.status === 'graded' || (submission?.grade !== undefined && submission?.grade !== null);
-    const isOverdue = new Date() > new Date(assignment.deadline);
+    if (!submission) return false;
     
-    return hasSubmission(assignment) && !isGraded && !isOverdue;
+    const hasFile = !!submission.fileUrl && submission.fileUrl !== "";
+    const isGraded = submission.status === 'graded';
+    
+    return hasFile && !isGraded;
   };
 
   const assignments = assignmentsData?.assignments || [];
@@ -222,19 +237,21 @@ export default function StudentAssignmentsPage() {
   }
 
   if (error) {
-    return <ErrorDisplay error={error} onRetry={fetchData} title="Error Loading Assignments" />;
+    return <ErrorDisplay error={error} onRetry={() => { fetchAssignments(); fetchSubmissions(); }} title="Error Loading Assignments" />;
   }
 
-  // Count assignments by status using the new logic
-  const upcomingCount = assignments.filter((a: Assignment) => getStatusInfo(a).status === 'upcoming').length;
-  const pendingCount = assignments.filter((a: Assignment) => getStatusInfo(a).status === 'pending').length;
-  const submittedCount = assignments.filter((a: Assignment) => getStatusInfo(a).status === 'submitted').length;
-  const gradedCount = assignments.filter((a: Assignment) => getStatusInfo(a).status === 'graded').length;
-  const overdueCount = assignments.filter((a: Assignment) => getStatusInfo(a).status === 'overdue').length;
+  // Count assignments by status
+  const statusCounts = {
+    upcoming: assignments.filter((a: Assignment) => getStatusInfo(a).status === 'upcoming').length,
+    pending: assignments.filter((a: Assignment) => getStatusInfo(a).status === 'pending').length,
+    submitted: assignments.filter((a: Assignment) => getStatusInfo(a).status === 'submitted').length,
+    graded: assignments.filter((a: Assignment) => getStatusInfo(a).status === 'graded').length,
+    overdue: assignments.filter((a: Assignment) => getStatusInfo(a).status === 'overdue').length,
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar onProfileClick={() => {}} />
+    <div className="min-h-screen bg-gray-50" key={refreshKey}>
+      <Navbar />
       <Sidebar activeItem={activeItem} onItemClick={setActiveItem} userRole="student" />
 
       <main className="lg:ml-64 p-6 lg:p-8 space-y-6 mt-10">
@@ -246,111 +263,35 @@ export default function StudentAssignmentsPage() {
           </div>
           <div className="flex items-center gap-2 text-sm text-gray-500">
             <Clock className="w-4 h-4" />
-            <span>{pendingCount + overdueCount} pending tasks</span>
+            <span>{statusCounts.pending + statusCounts.overdue} pending tasks</span>
           </div>
         </div>
 
-        {/* Stats Cards using StatsCard Component */}
+        {/* Stats Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-          <StatsCard
-            title="Total"
-            count={assignments.length}
-            subtitle="assignments"
-            iconColor="text-gray-600"
-            iconBg="bg-gray-50"
-          />
-
-          <StatsCard
-            title="Upcoming"
-            count={upcomingCount}
-            subtitle="assignments"
-            iconColor="text-blue-600"
-            iconBg="bg-blue-50"
-          />
-
-          <StatsCard
-            title="Pending"
-            count={pendingCount}
-            subtitle="assignments"
-            iconColor="text-orange-600"
-            iconBg="bg-orange-50"
-          />
-
-          <StatsCard
-            title="Submitted"
-            count={submittedCount}
-            subtitle="assignments"
-            iconColor="text-purple-600"
-            iconBg="bg-purple-50"
-          />
-
-          <StatsCard
-            title="Graded"
-            count={gradedCount}
-            subtitle="assignments"
-            iconColor="text-green-600"
-            iconBg="bg-green-50"
-          />
+          <StatsCard title="Total" count={assignments.length} subtitle="assignments" iconColor="text-gray-600" iconBg="bg-gray-50" />
+          <StatsCard title="Upcoming" count={statusCounts.upcoming} subtitle="assignments" iconColor="text-blue-600" iconBg="bg-blue-50" />
+          <StatsCard title="Pending" count={statusCounts.pending} subtitle="assignments" iconColor="text-orange-600" iconBg="bg-orange-50" />
+          <StatsCard title="Submitted" count={statusCounts.submitted} subtitle="assignments" iconColor="text-purple-600" iconBg="bg-purple-50" />
+          <StatsCard title="Graded" count={statusCounts.graded} subtitle="assignments" iconColor="text-green-600" iconBg="bg-green-50" />
         </div>
 
         {/* Filters and Search */}
         <div className="bg-white border border-gray-200 rounded-lg p-4">
           <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-            {/* Tabs */}
             <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => setActiveTab('all')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  activeTab === 'all'
-                    ? 'bg-teal-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                All ({assignments.length})
-              </button>
-              <button
-                onClick={() => setActiveTab('upcoming')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  activeTab === 'upcoming'
-                    ? 'bg-teal-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                Upcoming ({upcomingCount})
-              </button>
-              <button
-                onClick={() => setActiveTab('pending')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  activeTab === 'pending'
-                    ? 'bg-teal-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                Pending ({pendingCount})
-              </button>
-              <button
-                onClick={() => setActiveTab('submitted')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  activeTab === 'submitted'
-                    ? 'bg-teal-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                Submitted ({submittedCount})
-              </button>
-              <button
-                onClick={() => setActiveTab('graded')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  activeTab === 'graded'
-                    ? 'bg-teal-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                Graded ({gradedCount})
-              </button>
+              {['all', 'upcoming', 'pending', 'submitted', 'graded', 'overdue'].map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    activeTab === tab ? 'bg-teal-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {tab.charAt(0).toUpperCase() + tab.slice(1)} ({tab === 'all' ? assignments.length : statusCounts[tab as keyof typeof statusCounts]})
+                </button>
+              ))}
             </div>
-
-            {/* Search */}
             <div className="relative w-full sm:w-64">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
@@ -367,17 +308,13 @@ export default function StudentAssignmentsPage() {
         {/* Assignments List */}
         <div className="space-y-4">
           {filteredAssignments.length === 0 ? (
-            <EmptyState 
-              icon={FileText} 
-              message="No assignments found"
-              description="Try adjusting your filters or check back later"
-            />
+            <EmptyState icon={FileText} message="No assignments found" description="Try adjusting your filters or check back later" />
           ) : (
             filteredAssignments.map((assignment: Assignment) => {
               const statusInfo = getStatusInfo(assignment);
               const priorityInfo = getPriorityInfo(assignment);
               const submission = getSubmissionForAssignment(assignment._id);
-              const hasSubmission = !!submission;
+              const hasSubmissionFile = hasSubmission(assignment);
               const canResubmitAssignment = canResubmit(assignment);
 
               return (
@@ -415,28 +352,21 @@ export default function StudentAssignmentsPage() {
                           {statusInfo.label}
                         </span>
                         {assignment.fileUrl && (
-                          <button
-                            onClick={() => handleDownloadAssignment(assignment)}
-                            className="text-xs text-teal-600 hover:text-teal-700 font-medium flex items-center gap-1"
-                          >
-                            <Download className="w-3 h-3" />
-                            Assignment File
+                          <button onClick={() => handleDownloadAssignment(assignment)} className="text-xs text-teal-600 hover:text-teal-700 font-medium flex items-center gap-1">
+                            <Download className="w-3 h-3" /> Assignment File
                           </button>
                         )}
                       </div>
 
-                      {submission && (
+                      {submission && hasSubmissionFile && (
                         <div className="mt-3 pt-3 border-t border-gray-200">
                           <div className="flex flex-col gap-2 text-sm">
                             <span className="text-gray-600">
                               Submitted: {new Date(submission.submittedAt).toLocaleDateString()} at {new Date(submission.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </span>
-                            {submission.grade !== undefined && submission.grade !== null && (
+                            {submission.marks !== undefined && submission.marks !== null && (
                               <span className="text-gray-600">
-                                Grade: <span className="font-semibold text-gray-900">{submission.grade}%</span>
-                                <span className={`ml-2 ${submission.grade >= 90 ? 'text-green-600' : submission.grade >= 70 ? 'text-orange-600' : 'text-red-600'}`}>
-                                  ({submission.grade >= 90 ? 'Excellent' : submission.grade >= 70 ? 'Good' : 'Needs Improvement'})
-                                </span>
+                                Grade: <span className="font-semibold text-gray-900">{submission.marks}%</span>
                               </span>
                             )}
                             {submission.feedback && (
@@ -446,12 +376,8 @@ export default function StudentAssignmentsPage() {
                               </div>
                             )}
                             {submission.fileUrl && (
-                              <button
-                                onClick={() => handleDownloadSubmission(submission)}
-                                className="text-sm text-teal-600 hover:text-teal-700 font-medium flex items-center gap-1 w-fit"
-                              >
-                                <Download className="w-4 h-4" />
-                                Download My Submission
+                              <button onClick={() => handleDownloadSubmission(submission)} className="text-sm text-teal-600 hover:text-teal-700 font-medium flex items-center gap-1 w-fit cursor-pointer">
+                                <Download className="w-4 h-4 " /> Download My Submission
                               </button>
                             )}
                           </div>
@@ -459,55 +385,53 @@ export default function StudentAssignmentsPage() {
                       )}
                     </div>
 
-                    {/* Action Button */}
+                    {/* Action Buttons */}
                     <div className="flex flex-col items-end gap-3">
-                      {!hasSubmission && assignment.canSubmit && (
-                        <button
-                          onClick={() => handleNewSubmitAssignment(assignment)}
+                      {/* Show Submit button only if NO submission exists and not overdue */}
+                      {!hasSubmissionFile && statusInfo.status !== 'overdue' && (
+                        <button 
+                          onClick={() => handleNewSubmitAssignment(assignment)} 
                           className="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700 transition-colors flex items-center gap-2"
                         >
-                          <Upload className="w-4 h-4" />
-                          Submit
+                          <Upload className="w-4 h-4" /> Submit
                         </button>
                       )}
                       
-                      {canResubmitAssignment && (
-                        <button
-                          onClick={() => handleResubmitAssignment(assignment)}
+                      {/* Show Resubmit button if submission exists and can be resubmitted */}
+                      {hasSubmissionFile && canResubmitAssignment && (
+                        <button 
+                          onClick={() => handleResubmitAssignment(assignment)} 
                           className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
                         >
-                          <RefreshCw className="w-4 h-4" />
-                          Resubmit
+                          <RefreshCw className="w-4 h-4" /> Resubmit
                         </button>
                       )}
                       
-                      {hasSubmission && !canResubmitAssignment && statusInfo.status === 'submitted' && (
-                        <div className="flex flex-col items-center gap-2 text-purple-600">
-                          <CheckCircle className="w-6 h-6" />
-                          <span className="font-medium text-sm">Submitted</span>
-                          <span className="text-xs text-gray-500">Waiting for grading</span>
-                        </div>
-                      )}
-                      
-                      {statusInfo.status === 'graded' && (
+                      {/* Show Submitted status if submitted but can't resubmit (graded) */}
+                      {hasSubmissionFile && !canResubmitAssignment && statusInfo.status === 'graded' && (
                         <div className="flex flex-col items-center gap-2">
-                          <div className="flex items-center gap-2 text-green-600">
-                            <CheckCircle className="w-6 h-6" />
-                            <span className="font-medium text-sm">Graded</span>
-                          </div>
-                          {submission?.grade !== undefined && submission?.grade !== null && (
-                            <span className="text-lg font-bold text-gray-900">
-                              {submission.grade}%
-                            </span>
+                          <CheckCircle className="w-6 h-6 text-green-600" />
+                          <span className="font-medium text-sm text-green-600">Graded</span>
+                          {submission?.marks !== undefined && (
+                            <span className="text-lg font-bold text-gray-900">{submission.marks}%</span>
                           )}
                         </div>
                       )}
                       
-                      {statusInfo.status === 'overdue' && (
+                      {/* Show Submitted status if submitted and awaiting grade */}
+                      {hasSubmissionFile && canResubmitAssignment && statusInfo.status === 'submitted' && (
+                        <div className="flex flex-col items-center gap-2 text-purple-600">
+                          <CheckCircle className="w-6 h-6" />
+                          <span className="font-medium text-sm">Submitted</span>
+                          <span className="text-xs text-gray-500">Awaiting grade</span>
+                        </div>
+                      )}
+                      
+                      {/* Show Overdue status if no submission and past deadline */}
+                      {statusInfo.status === 'overdue' && !hasSubmissionFile && (
                         <div className="flex flex-col items-center gap-2 text-red-600">
                           <AlertCircle className="w-6 h-6" />
                           <span className="font-medium text-sm">Overdue</span>
-                          <span className="text-xs text-gray-500">Submission closed</span>
                         </div>
                       )}
                     </div>
@@ -528,7 +452,6 @@ export default function StudentAssignmentsPage() {
             setShowUploadModal(false);
             setSelectedAssignment(null);
             setIsResubmitting(false);
-            resetSubmit();
           }}
           onSubmit={handleSubmitAssignment}
           isSubmitting={submitting}

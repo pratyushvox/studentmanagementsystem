@@ -12,7 +12,8 @@ export const getTeacherDashboard = async (req: Request, res: Response) => {
 
     const teacher = await Teacher.findOne({ userId: req.user._id })
       .populate("assignedSubjects.subjectId", "name code")
-      .populate("assignedSubjects.groups", "name semester");
+      .populate("assignedSubjects.groups", "name semester")
+      .populate("moduleLeaderSubjects", "name code"); // Populate module leader subjects
 
     if (!teacher) {
       return res.status(404).json({ message: "Teacher profile not found" });
@@ -44,6 +45,8 @@ export const getTeacherDashboard = async (req: Request, res: Response) => {
           name: req.user.fullName,
           teacherId: teacher.teacherId,
           department: teacher.department,
+          isModuleLeader: teacher.isModuleLeader,
+          moduleLeaderSubjects: teacher.moduleLeaderSubjects || [], // Add module leader subjects
           assignedSubjects: teacher.assignedSubjects
         },
         assignments: {
@@ -63,5 +66,3 @@ export const getTeacherDashboard = async (req: Request, res: Response) => {
     res.status(500).json({ message: err.message });
   }
 };
-
-

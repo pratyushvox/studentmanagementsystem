@@ -5,14 +5,14 @@ export interface ISubmission extends Document {
   studentId: mongoose.Types.ObjectId;
   groupId: mongoose.Types.ObjectId;
   subjectId: mongoose.Types.ObjectId;
-  assignedTeacherId: mongoose.Types.ObjectId; // CRITICAL: Teacher who will grade this
+  assignedTeacherId: mongoose.Types.ObjectId;
   fileUrl: string;
   submittedAt?: Date;
   marks?: number;
   feedback?: string;
   gradedBy?: mongoose.Types.ObjectId;
   gradedAt?: Date;
-  status: "pending" | "graded" | "late";
+  status: "pending" | "submitted" | "late" | "graded"; // ✅ Added "submitted"
 }
 
 const submissionSchema = new Schema<ISubmission>(
@@ -41,11 +41,11 @@ const submissionSchema = new Schema<ISubmission>(
       type: Schema.Types.ObjectId, 
       ref: "Teacher", 
       required: true 
-    }, // Teacher responsible for grading this submission
+    },
     fileUrl: { 
       type: String, 
       default: "" 
-    }, // Empty until student submits
+    },
     submittedAt: { 
       type: Date 
     },
@@ -65,7 +65,7 @@ const submissionSchema = new Schema<ISubmission>(
     },
     status: { 
       type: String, 
-      enum: ["pending", "graded", "late"], 
+      enum: ["pending", "submitted", "late", "graded"],
       default: "pending" 
     }
   },
@@ -74,7 +74,7 @@ const submissionSchema = new Schema<ISubmission>(
 
 // Indexes for faster queries
 submissionSchema.index({ assignmentId: 1, studentId: 1 }, { unique: true });
-submissionSchema.index({ assignedTeacherId: 1 }); // For teacher grading queries
+submissionSchema.index({ assignedTeacherId: 1 });
 submissionSchema.index({ status: 1 });
 submissionSchema.index({ studentId: 1 });
 submissionSchema.index({ subjectId: 1 });

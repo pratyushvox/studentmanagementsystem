@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Plus,
   FileText,
@@ -80,7 +80,6 @@ export default function TeacherAssignments() {
   const [filterType, setFilterType] = useState("all");
   const [filterSubject, setFilterSubject] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
-  const [filteredAssignments, setFilteredAssignments] = useState<Assignment[]>([]);
 
   const [confirmDialog, setConfirmDialog] = useState({
     isOpen: false,
@@ -110,13 +109,6 @@ export default function TeacherAssignments() {
   } = useApiGet<{ assignments: Assignment[] }>("/teacher/assignments", {
     autoFetch: true,
     onError: (err) => toast.error(`Failed to load assignments: ${err}`)
-  });
-
-  const {
-    data: statsData,
-    loading: statsLoading
-  } = useApiGet("/teacher/assignments/statistics", {
-    autoFetch: true
   });
 
   const {
@@ -153,37 +145,42 @@ export default function TeacherAssignments() {
     onError: (err) => toast.error(err || "Failed to delete assignment")
   });
 
-  // Extract data
-  const assignments = assignmentsData?.assignments || [];
-  const stats = statsData?.statistics || {};
-  const teacher = teacherData?.dashboard?.teacher || teacherData?.teacher;
-  const isModuleLeader = teacher?.isModuleLeader || false;
-  const assignedSubjects = teacher?.assignedSubjects || [];
+  // Extract data - use useMemo to prevent recreation on every render
+  const assignments = useMemo(() => assignmentsData?.assignments || [], [assignmentsData]);
+  const teacher = useMemo(() => teacherData?.dashboard?.teacher || teacherData?.teacher, [teacherData]);
+  const isModuleLeader = useMemo(() => teacher?.isModuleLeader || false, [teacher]);
+  const assignedSubjects = useMemo(() => teacher?.assignedSubjects || [], [teacher]);
 
-  // Get unique subjects and groups
-  const subjects: Subject[] = assignedSubjects
-    .filter((as: any) => as.subjectId && as.subjectId._id)
-    .map((as: any) => ({
-      _id: as.subjectId._id,
-      name: as.subjectId.name,
-      code: as.subjectId.code,
-      semester: as.semester
-    }));
+  // Get unique subjects and groups - memoized to prevent recreation
+  const subjects: Subject[] = useMemo(() => 
+    assignedSubjects
+      .filter((as: any) => as.subjectId && as.subjectId._id)
+      .map((as: any) => ({
+        _id: as.subjectId._id,
+        name: as.subjectId.name,
+        code: as.subjectId.code,
+        semester: as.semester
+      })),
+    [assignedSubjects]
+  );
 
-  const allGroups: Group[] = assignedSubjects
-    .filter((as: any) => as.groups && as.groups.length > 0)
-    .flatMap((as: any) =>
-      as.groups.map((g: any) => ({
-        _id: g._id,
-        name: g.name,
-        semester: as.semester,
-        studentCount: g.studentCount || 0,
-        capacity: g.capacity || 0
-      }))
-    );
+  const allGroups: Group[] = useMemo(() =>
+    assignedSubjects
+      .filter((as: any) => as.groups && as.groups.length > 0)
+      .flatMap((as: any) =>
+        as.groups.map((g: any) => ({
+          _id: g._id,
+          name: g.name,
+          semester: as.semester,
+          studentCount: g.studentCount || 0,
+          capacity: g.capacity || 0
+        }))
+      ),
+    [assignedSubjects]
+  );
 
-  // Filter assignments
-  useEffect(() => {
+  // Filter assignments - memoized
+  const filteredAssignments = useMemo(() => {
     let filtered = [...assignments];
 
     if (searchTerm) {
@@ -201,7 +198,7 @@ export default function TeacherAssignments() {
       filtered = filtered.filter(a => a.subjectId._id === filterSubject);
     }
 
-    setFilteredAssignments(filtered);
+    return filtered;
   }, [assignments, searchTerm, filterType, filterSubject]);
 
   // Handlers
@@ -221,9 +218,30 @@ export default function TeacherAssignments() {
   const handleCreateAssignment = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Validation
+    if (!newAssignment.title.trim()) {
+      toast.error("Please enter assignment title");
+      return;
+    }
+
+    if (!newAssignment.subjectId) {
+      toast.error("Please select a subject");
+      return;
+    }
+
+    if (newAssignment.type === "weekly" && newAssignment.groups.length === 0) {
+      toast.error("Please select at least one group for weekly assignment");
+      return;
+    }
+
+    if (!newAssignment.deadline) {
+      toast.error("Please set a deadline");
+      return;
+    }
+
     const formData = new FormData();
-    formData.append("title", newAssignment.title);
-    formData.append("description", newAssignment.description);
+    formData.append("title", newAssignment.title.trim());
+    formData.append("description", newAssignment.description.trim());
     formData.append("subjectId", newAssignment.subjectId);
     formData.append("type", newAssignment.type);
     formData.append("maxMarks", newAssignment.maxMarks);
@@ -254,6 +272,7 @@ export default function TeacherAssignments() {
 
   const handleDeleteAssignment = async (assignment: Assignment) => {
     await deleteAssignmentApi(`/teacher/assignments/${assignment._id}`);
+    setConfirmDialog({ ...confirmDialog, isOpen: false });
   };
 
   const openEditModal = (assignment: Assignment) => {
@@ -272,7 +291,30 @@ export default function TeacherAssignments() {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setSelectedFile(e.target.files[0]);
+      const file = e.target.files[0];
+      
+      // Validate file size (10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error("File size must be less than 10MB");
+        return;
+      }
+
+      // Validate file type
+      const allowedTypes = [
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.ms-powerpoint',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'text/plain'
+      ];
+
+      if (!allowedTypes.includes(file.type)) {
+        toast.error("Only PDF, DOC, DOCX, PPT, PPTX, and TXT files are allowed");
+        return;
+      }
+
+      setSelectedFile(file);
     }
   };
 
@@ -450,7 +492,6 @@ export default function TeacherAssignments() {
     </div>
   );
 }
-
 // Create Assignment Modal Component
 interface CreateAssignmentModalProps {
   isOpen: boolean;
