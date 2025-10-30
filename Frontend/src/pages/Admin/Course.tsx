@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   BookOpen,
   Search,
@@ -184,16 +184,40 @@ export default function AdminCourses() {
     onError: (err) => toast.error(err || "Failed to remove module leader")
   });
 
-  // Get data from API
-  const subjects = Array.isArray(subjectsData) ? subjectsData : subjectsData?.subjects || [];
-  const teachers = Array.isArray(teachersData) ? teachersData : teachersData?.teachers || [];
-  const groups = Array.isArray(groupsData) ? groupsData : groupsData?.data || [];
+  // Get data from API - memoized to prevent unnecessary re-renders
+  const subjects = useMemo(() => 
+    Array.isArray(subjectsData) ? subjectsData : subjectsData?.subjects || [], 
+    [subjectsData]
+  );
 
-  // Calculate stats
-  const subjectsWithModuleLeader = subjects.filter(s => s.hasModuleLeader || s.moduleLeader).length;
+  const teachers = useMemo(() => 
+    Array.isArray(teachersData) ? teachersData : teachersData?.teachers || [], 
+    [teachersData]
+  );
 
-  // Form fields
-  const subjectAddFields = [
+  const groups = useMemo(() => 
+    Array.isArray(groupsData) ? groupsData : groupsData?.data || [], 
+    [groupsData]
+  );
+
+  // Calculate stats - memoized to prevent recalculations
+  const subjectsWithModuleLeader = useMemo(() => 
+    subjects.filter(s => s.hasModuleLeader || s.moduleLeader).length, 
+    [subjects]
+  );
+
+  const totalTeachersAssigned = useMemo(() => 
+    subjects.reduce((sum, s) => sum + (s.teachersCount || 0), 0), 
+    [subjects]
+  );
+
+  const totalStudents = useMemo(() => 
+    subjects.reduce((sum, s) => sum + (s.studentsCount || 0), 0), 
+    [subjects]
+  );
+
+  // Form fields - memoized to prevent recreation on every render
+  const subjectAddFields = useMemo(() => [
     {
       name: "code",
       label: "Subject Code",
@@ -251,9 +275,9 @@ export default function AdminCourses() {
         }))
       ]
     }
-  ];
+  ], [teachers]);
 
-  const subjectEditFields = [
+  const subjectEditFields = useMemo(() => [
     {
       name: "name",
       label: "Subject Name",
@@ -272,7 +296,7 @@ export default function AdminCourses() {
       type: "textarea" as const,
       required: false
     }
-  ];
+  ], []);
 
   // Filter subjects
   useEffect(() => {
@@ -463,7 +487,7 @@ export default function AdminCourses() {
 
             <StatsCard
               title="Teachers Assigned"
-              count={subjects.reduce((sum, s) => sum + (s.teachersCount || 0), 0)}
+              count={totalTeachersAssigned}
               subtitle="total assignments"
               icon={Users}
               iconColor="text-green-600"
@@ -472,7 +496,7 @@ export default function AdminCourses() {
 
             <StatsCard
               title="Total Students"
-              count={subjects.reduce((sum, s) => sum + (s.studentsCount || 0), 0)}
+              count={totalStudents}
               subtitle="enrolled"
               icon={Clock}
               iconColor="text-purple-600"
