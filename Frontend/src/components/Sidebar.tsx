@@ -34,7 +34,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     { id: "assignments", label: "Assignments", icon: FileText, path: "/student/Assignment" },
     { id: "attendance", label: "Attendance", icon: Calendar, path: "/student/attendance" },
     { id: "grades", label: "Grades", icon: BarChart3, path: "/student/grades" },
-    { id: "settings", label: "Settings", icon: Settings, path: "/student/settings" },
+    { id: "settings m", label: "Settings", icon: Settings, path: "/student/settings" },
   ];
 
   // Teacher Menu with paths
@@ -44,7 +44,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     { id: "assignments", label: "Assignments", icon: FileText, path: "/teacher/assignments" },
     { id: "submission", label: "Submission", icon: Calendar, path: "/teacher/submission" },
     { id: "learning Resource", label: "learning Resource", icon: BarChart3, path: "/teacher/learningresource" },
-    { id: "settings", label: "Settings", icon: Settings, path: "/teacher/settings" },
+    { id: "attendance", label: "Attendance", icon: Settings, path: "/teacher/attendance" },
   ];
 
   // Admin Menu with paths

@@ -13,6 +13,17 @@ export const formatDate = (dateString: string | Date): string => {
 };
 
 /**
+ * Format month and year (e.g., "January 2024")
+ */
+export const formatMonthYear = (month: number, year: number): string => {
+  const date = new Date(year, month - 1); // month is 0-indexed in Date
+  return date.toLocaleDateString('en-US', {
+    month: 'long',
+    year: 'numeric'
+  });
+};
+
+/**
  * Format date with time (e.g., "Jan 15, 2024 at 2:30 PM")
  */
 export const formatDateTime = (dateString: string | Date): string => {

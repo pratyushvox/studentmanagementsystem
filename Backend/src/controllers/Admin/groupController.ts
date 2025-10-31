@@ -106,6 +106,7 @@ export const getGroupById = async (req: Request, res: Response) => {
 };
 
 // 🟢 Assign teacher to subject in group
+// 🟢 Assign teacher to subject in group
 export const assignTeacherToGroup = async (req: Request, res: Response) => {
   try {
     const { groupId, subjectId, teacherId } = req.body;
@@ -113,47 +114,44 @@ export const assignTeacherToGroup = async (req: Request, res: Response) => {
     const group = await Group.findById(groupId);
     if (!group) return res.status(404).json({ message: "Group not found" });
 
-    // Check if subject already assigned
-    const exists = group.subjectTeachers.some(
-      (st) => st.subjectId.toString() === subjectId
+    const teacher = await Teacher.findById(teacherId);
+    if (!teacher) return res.status(404).json({ message: "Teacher not found" });
+
+    const subject = await Subject.findById(subjectId);
+    if (!subject) return res.status(404).json({ message: "Subject not found" });
+
+    // Check if subject-teacher combination already exists in group
+    const existingSubjectTeacher = group.subjectTeachers.find(
+      st => st.subjectId.toString() === subjectId && st.teacherId.toString() === teacherId
     );
 
-    if (exists) {
-      group.subjectTeachers = group.subjectTeachers.map((st) =>
-        st.subjectId.toString() === subjectId
-          ? { ...st, teacherId, assignedAt: new Date() }
-          : st
-      );
-    } else {
+    if (!existingSubjectTeacher) {
+      // Add to group's subjectTeachers
       group.subjectTeachers.push({
         subjectId,
         teacherId,
         assignedAt: new Date(),
       });
+      await group.save();
     }
-
-    await group.save();
 
     // Update teacher's assignedSubjects
-    const teacher = await Teacher.findById(teacherId);
-    if (teacher) {
-      const subjectAssignment = teacher.assignedSubjects.find(
-        (as: any) => as.subjectId.toString() === subjectId
-      );
+    const subjectAssignment = teacher.assignedSubjects.find(
+      (as: any) => as.subjectId.toString() === subjectId
+    );
 
-      if (subjectAssignment) {
-        if (!subjectAssignment.groups.includes(groupId)) {
-          subjectAssignment.groups.push(groupId);
-        }
-      } else {
-        teacher.assignedSubjects.push({
-          subjectId,
-          semester: group.semester,
-          groups: [groupId],
-        });
+    if (subjectAssignment) {
+      if (!subjectAssignment.groups.includes(groupId)) {
+        subjectAssignment.groups.push(groupId);
       }
-      await teacher.save();
+    } else {
+      teacher.assignedSubjects.push({
+        subjectId,
+        semester: subject.semester,
+        groups: [groupId],
+      });
     }
+    await teacher.save();
 
     res.status(200).json({ message: "Teacher assigned successfully", group });
   } catch (error: any) {

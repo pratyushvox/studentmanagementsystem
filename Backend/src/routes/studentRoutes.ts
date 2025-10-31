@@ -26,7 +26,7 @@ import {
 // Submissions
 import {
   submitAssignment,
-  resubmitAssignment, // ADD THIS IMPORT
+  resubmitAssignment,
   getMySubmissions,
   getSubmissionById
 } from "../controllers/Student/submissioncontroller";
@@ -38,6 +38,14 @@ import {
 } from "../controllers/Student/postcontroller";
 
 import { getStudentNotices } from "../controllers/Student/noticeController";
+
+// Attendance - ADD THESE IMPORTS
+import {
+  getStudentAttendanceSummary,
+  getStudentAttendanceRecords,
+  getStudentSubjectAttendance,
+  getStudentSubjects
+} from "../controllers/Student/studentattendancecontroller";
 
 const router = express.Router();
 
@@ -71,7 +79,6 @@ router.post(
   submitAssignment
 );
 
-// ADD THIS NEW ROUTE FOR RESUBMISSION
 router.post(
   "/assignments/resubmit",
   protect,
@@ -92,5 +99,13 @@ router.get("/posts/:postId", protect, getPostById);
 // NOTICES
 // ============================================================
 router.get("/notice", protect, getStudentNotices);
+
+// ============================================================
+// ATTENDANCE - ADD THESE NEW ROUTES
+// ============================================================
+router.get("/attendance/summary", protect, getStudentAttendanceSummary);
+router.get("/attendance/records", protect, getStudentAttendanceRecords);
+router.get("/attendance/subject/:subjectId", protect, getStudentSubjectAttendance);
+router.get("/attendance/subjects", protect, getStudentSubjects);
 
 export default router;

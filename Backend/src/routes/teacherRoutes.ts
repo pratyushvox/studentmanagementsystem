@@ -47,6 +47,24 @@ import {
   getRecentActivity
 } from "../controllers/Teacher/analyticsController";
 
+// Attendance Management
+import {
+  getTeacherAttendanceSetup,
+  markAttendance,
+  getAttendanceByDate,
+  getAttendanceHistory,
+  getStudentAttendanceSummary,
+  markBulkAttendance
+} from "../controllers/Teacher/attendancecontroller";
+
+// Group Management (View Only)
+import {
+  getMyGroups,
+  getGroupStudents,
+  getMyGroupsWithDetails,
+  getStudentDetails
+} from "../controllers/Teacher/Teachergroupcontroller.js";
+
 const router = express.Router();
 
 /* ============================================================
@@ -65,6 +83,21 @@ router.get("/workload", protect, teacherOnly, getMyWorkload);
 
 // Get teacher's assigned subjects and groups
 router.get("/subjects", protect, teacherOnly, getMySubjects);
+
+/* ============================================================
+ 👥 GROUP MANAGEMENT (VIEW ONLY)
+============================================================ */
+// Get teacher's assigned groups
+router.get("/groups/my-groups", protect, teacherOnly, getMyGroups);
+
+// Get teacher's groups with detailed information
+router.get("/groups/my-groups/detailed", protect, teacherOnly, getMyGroupsWithDetails);
+
+// Get students from a specific group (teacher must be assigned to that group)
+router.get("/groups/:groupId/students", protect, teacherOnly, getGroupStudents);
+
+// Get specific student details (only if student is in teacher's assigned group)
+router.get("/groups/students/:studentId", protect, teacherOnly, getStudentDetails);
 
 /* ============================================================
  📘 ASSIGNMENT MANAGEMENT
@@ -131,6 +164,27 @@ router.get("/posts", protect, teacherOnly, getMyPosts);
 router.get("/posts/:postId", protect, teacherOnly, getMyPostById);
 router.put("/posts/:postId", protect, teacherOnly, updatePost);
 router.delete("/posts/:postId", protect, teacherOnly, deletePost);
+
+/* ============================================================
+ 📊 ATTENDANCE MANAGEMENT
+============================================================ */
+// Get teacher's attendance setup (groups and subjects they teach)
+router.get("/attendance/setup", protect, teacherOnly, getTeacherAttendanceSetup);
+
+// Mark attendance for a specific date
+router.post("/attendance/mark", protect, teacherOnly, markAttendance);
+
+// Bulk mark attendance for multiple dates
+router.post("/attendance/mark-bulk", protect, teacherOnly, markBulkAttendance);
+
+// Get attendance for a specific date
+router.get("/attendance/date", protect, teacherOnly, getAttendanceByDate);
+
+// Get attendance history
+router.get("/attendance/history", protect, teacherOnly, getAttendanceHistory);
+
+// Get student attendance summary
+router.get("/attendance/student-summary", protect, teacherOnly, getStudentAttendanceSummary);
 
 /* ============================================================
  📢 NOTICES

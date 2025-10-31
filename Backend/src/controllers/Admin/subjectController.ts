@@ -210,6 +210,7 @@ export const getAllSubjects = async (_req: Request, res: Response) => {
 };
 
 // Assign subject to teacher (for teaching groups)
+// Assign subject to teacher (for teaching groups)
 export const assignSubjectToTeacher = async (req: Request, res: Response) => {
   try {
     const { teacherId } = req.params;
@@ -255,21 +256,29 @@ export const assignSubjectToTeacher = async (req: Request, res: Response) => {
         });
       }
 
-      // Update group's subjectTeachers array
-      await Group.updateMany(
-        { _id: { $in: groups } },
-        {
-          $addToSet: {
-            subjectTeachers: {
+      // 🔥 FIX: Update group's subjectTeachers array PROPERLY
+      for (const groupId of groups) {
+        const group = await Group.findById(groupId);
+        if (group) {
+          // Check if this subject-teacher combination already exists in the group
+          const existingSubjectTeacher = group.subjectTeachers.find(
+            st => st.subjectId.toString() === subjectId && st.teacherId.toString() === teacherId
+          );
+
+          if (!existingSubjectTeacher) {
+            // Add new subject-teacher assignment to the group
+            group.subjectTeachers.push({
               subjectId: subject._id,
               teacherId: teacher._id,
               assignedAt: new Date()
-            }
+            });
+            await group.save();
           }
         }
-      );
+      }
     }
 
+    // Add to teacher's assignedSubjects
     teacher.assignedSubjects.push({
       subjectId,
       semester: subject.semester,

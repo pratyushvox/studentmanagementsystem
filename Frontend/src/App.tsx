@@ -17,6 +17,7 @@ import StudentDashboardPage from "./pages/Student/Studentdashboard";
 import StudentCoursesPage from './pages/Student/Studentcourse';
 import StudentAssignmentsPage from './pages/Student/Studentassingment';
 import ProfileSetup from './pages/Student/Studentprofilepage';
+import StudentAttendancePage from './pages/Student/Studentattendancepage';
 
 
 // teacher 
@@ -25,6 +26,7 @@ import TeacherDashboard from './pages/Teacher/Teacherdashboard';
 import TeacherAssignments from './pages/Teacher/Teacherassignement';
 import TeacherGradingDashboard from './pages/Teacher/Teachersubmission';
 import TeacherPostUpload from './pages/Teacher/TeacherLearningresources';
+import TeacherAttendancePage from './pages/Teacher/Teacherattendancepage';
 
 //admin
 import AdminDashboardPage from './pages/Admin/Admindashboard';
@@ -89,6 +91,14 @@ function App() {
           path="/student/Assignment" element={
              <ProtectedRoute role="student">
               <StudentAssignmentsPage />
+              </ProtectedRoute>
+          } 
+          />
+
+             <Route 
+          path="/student/attendance" element={
+             <ProtectedRoute role="student">
+              <StudentAttendancePage />
               </ProtectedRoute>
           } 
           />
@@ -172,6 +182,15 @@ function App() {
             element={
               <ProtectedRoute role="teacher">
                 <TeacherPostUpload />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/teacher/attendance"
+            element={
+              <ProtectedRoute role="teacher">
+                <TeacherAttendancePage />
               </ProtectedRoute>
             }
           />
