@@ -43,7 +43,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 
     { id: "assignments", label: "Assignments", icon: FileText, path: "/teacher/assignments" },
     { id: "submission", label: "Submission", icon: Calendar, path: "/teacher/submission" },
-    { id: "grades", label: "Grades", icon: BarChart3, path: "/teacher/grades" },
+    { id: "learning Resource", label: "learning Resource", icon: BarChart3, path: "/teacher/learningresource" },
     { id: "settings", label: "Settings", icon: Settings, path: "/teacher/settings" },
   ];
 

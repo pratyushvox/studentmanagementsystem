@@ -24,6 +24,7 @@ import ProfileSetup from './pages/Student/Studentprofilepage';
 import TeacherDashboard from './pages/Teacher/Teacherdashboard'; 
 import TeacherAssignments from './pages/Teacher/Teacherassignement';
 import TeacherGradingDashboard from './pages/Teacher/Teachersubmission';
+import TeacherPostUpload from './pages/Teacher/TeacherLearningresources';
 
 //admin
 import AdminDashboardPage from './pages/Admin/Admindashboard';
@@ -162,6 +163,15 @@ function App() {
             element={
               <ProtectedRoute role="teacher">
                 <TeacherGradingDashboard />
+              </ProtectedRoute>
+            }
+          />
+
+           <Route
+            path="/teacher/learningresource"
+            element={
+              <ProtectedRoute role="teacher">
+                <TeacherPostUpload />
               </ProtectedRoute>
             }
           />
