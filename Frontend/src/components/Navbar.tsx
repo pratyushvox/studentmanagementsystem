@@ -1,4 +1,4 @@
-// src/components/Navbar.tsx (FIXED)
+// src/components/Navbar.tsx (UPDATED)
 import { useState } from "react";
 import { GraduationCap, LogOut, User, Bell } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -11,25 +11,30 @@ const Navbar: React.FC<NavbarProps> = ({ onProfileClick }) => {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const navigate = useNavigate();
 
+  // Parse user info safely
+  const userData = (() => {
+    try {
+      const stored = localStorage.getItem("user");
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  })();
+
+  const fullName = userData?.fullName || "User";
+  const role = userData?.role || "Guest";
+
   const handleLogout = () => {
-    // Clear localStorage
     localStorage.removeItem("token");
     localStorage.removeItem("role");
     localStorage.removeItem("fullName");
     localStorage.removeItem("user");
-
-    // Redirect to login page
     navigate("/login");
   };
 
   const handleEditProfile = () => {
-    // If callback provided, use it
-    if (onProfileClick) {
-      onProfileClick();
-    } else {
-      // Otherwise navigate to profile page
-      navigate("/profile");
-    }
+    if (onProfileClick) onProfileClick();
+    else navigate("/profile");
     setShowProfileMenu(false);
   };
 
@@ -60,17 +65,11 @@ const Navbar: React.FC<NavbarProps> = ({ onProfileClick }) => {
                 className="flex items-center gap-3 p-2 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-semibold">
-                  {localStorage.getItem("fullName")
-                    ? localStorage.getItem("fullName")?.charAt(0)
-                    : "U"}
+                  {fullName.charAt(0).toUpperCase()}
                 </div>
                 <div className="hidden sm:block text-left">
-                  <p className="text-sm font-semibold text-gray-700">
-                    {localStorage.getItem("fullName") || "User"}
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    {localStorage.getItem("role") || "Guest"}
-                  </p>
+                  <p className="text-sm font-semibold text-gray-700">{fullName}</p>
+                  <p className="text-xs text-gray-500 capitalize">{role}</p>
                 </div>
               </button>
 
