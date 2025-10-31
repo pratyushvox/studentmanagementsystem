@@ -268,14 +268,7 @@ export default function StudentAssignmentsPage() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-          <StatsCard title="Total" count={assignments.length} subtitle="assignments" iconColor="text-gray-600" iconBg="bg-gray-50" />
-          <StatsCard title="Upcoming" count={statusCounts.upcoming} subtitle="assignments" iconColor="text-blue-600" iconBg="bg-blue-50" />
-          <StatsCard title="Pending" count={statusCounts.pending} subtitle="assignments" iconColor="text-orange-600" iconBg="bg-orange-50" />
-          <StatsCard title="Submitted" count={statusCounts.submitted} subtitle="assignments" iconColor="text-purple-600" iconBg="bg-purple-50" />
-          <StatsCard title="Graded" count={statusCounts.graded} subtitle="assignments" iconColor="text-green-600" iconBg="bg-green-50" />
-        </div>
-
+       
         {/* Filters and Search */}
         <div className="bg-white border border-gray-200 rounded-lg p-4">
           <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
