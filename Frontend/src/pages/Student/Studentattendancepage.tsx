@@ -152,7 +152,7 @@ const StudentAttendancePage = () => {
       <>
         <Navbar />
         <Sidebar userRole="student" activeItem="attendance" />
-        <div className="ml-64 mt-16 min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+        <div>
           <LoadingSpinner message="Loading your attendance data..." />
         </div>
       </>

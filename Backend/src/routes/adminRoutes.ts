@@ -1,5 +1,3 @@
-
-
 // Updated Admin Routes with Module Leader Management
 import express from "express";
 import { protect, adminOnly } from "../middleware/authMiddleware";
@@ -40,7 +38,10 @@ import {
 // Promotion & Results
 import {
   promoteSemester,
+  manuallyPromoteStudents,
+  getPromotionReport,
   calculateSubjectResult,
+  getStudentMainAssignments
 } from "../controllers/Admin/promotionController";
 
 // Assignment Management (View/Delete Only)
@@ -165,7 +166,19 @@ adminRouter.get("/groups/:id/students", protect, adminOnly, getStudentsByGroup);
 /* ============================================================
  🎓 PROMOTION & RESULTS
 ============================================================ */
+// Automatic promotion for semester
 adminRouter.post("/promote/:semester", protect, adminOnly, promoteSemester);
+
+// Manual promotion for specific students
+adminRouter.post("/manual-promote", protect, adminOnly, manuallyPromoteStudents);
+
+// Promotion reports and analytics
+adminRouter.get("/promotion-report/:semester", protect, adminOnly, getPromotionReport);
+
+// Student main assignment details
+adminRouter.get("/students/:studentId/main-assignments/:semester", protect, adminOnly, getStudentMainAssignments);
+
+// Calculate subject results
 adminRouter.post("/calculate-result", protect, adminOnly, calculateSubjectResult);
 
 /* ============================================================

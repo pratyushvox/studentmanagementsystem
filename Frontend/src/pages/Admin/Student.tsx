@@ -11,7 +11,13 @@ import {
   UsersRound,
   BookOpen,
   Wand2,
-  AlertCircle
+  AlertCircle,
+  TrendingUp,
+  Award,
+  Clock,
+  BarChart3,
+  FileText,
+  Send
 } from "lucide-react";
 import Navbar from "../../components/Navbar";
 import Sidebar from "../../components/Sidebar";
@@ -19,6 +25,7 @@ import DataTable, { type Column, type Action } from "../../components/Table";
 import ConfirmDialog from "../../components/Confirmationdialogue";
 import UserFormModal from "../../components/Userformmodal";
 import StatsCard from "../../components/Cardstats";
+import PromotionModal from "../../components/PromotionModal";
 import { LoadingSpinner, ErrorDisplay } from "../../components/Loadingerror";
 import { useApiGet, useApiPost, useApiPut, useApiPatch, useApiDelete } from "../../hooks/useApi";
 import { toast } from 'react-toastify';
@@ -32,15 +39,19 @@ export default function AdminStudents() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAssignGroupModal, setShowAssignGroupModal] = useState(false);
+  const [showPromotionModal, setShowPromotionModal] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [filteredStudents, setFilteredStudents] = useState([]);
+  const [selectedSemester, setSelectedSemester] = useState("1");
+  const [promotionResults, setPromotionResults] = useState(null);
 
   const [confirmDialog, setConfirmDialog] = useState({
     isOpen: false,
     type: "danger",
     title: "",
     message: "",
-    onConfirm: () => {}
+    onConfirm: () => {},
+    data: null
   });
 
   const [newStudent, setNewStudent] = useState({
@@ -144,6 +155,23 @@ export default function AdminStudents() {
       refetchStudents();
     },
     onError: (err) => toast.error(err || "Failed to auto-assign students")
+  });
+
+  const { post: promoteSemesterApi } = useApiPost({
+    onSuccess: (data) => {
+      setPromotionResults(data);
+      toast.success(`Promotion completed! ${data.promoted} promoted, ${data.failed} failed`);
+      refetchStudents();
+    },
+    onError: (err) => toast.error(err || "Failed to promote students")
+  });
+
+  const { post: manuallyPromoteApi } = useApiPost({
+    onSuccess: (data) => {
+      toast.success(`Manually promoted ${data.promoted} students!`);
+      refetchStudents();
+    },
+    onError: (err) => toast.error(err || "Failed to manually promote students")
   });
 
   // Get students array from response
@@ -279,6 +307,40 @@ export default function AdminStudents() {
     await autoAssignApi("/admin/groups/auto-assign-students", {});
   };
 
+  const handlePromoteSemester = async (semester: string) => {
+    setConfirmDialog({
+      isOpen: true,
+      type: "info",
+      title: "Run Auto Promotion",
+      message: `This will promote students from <strong>Semester ${semester}</strong> to the next semester.<br/><br/>
+              <strong>Requirements for Auto-Promotion:</strong><br/>
+              • 75% or higher attendance<br/>
+              • 40+ marks in all main assignments<br/><br/>
+              Students meeting all criteria will be automatically promoted. Others will be flagged for manual review.<br/><br/>
+              <strong>This action cannot be undone.</strong>`,
+      onConfirm: () => promoteSemesterApi(`/admin/promote/${semester}`),
+      data: { semester }
+    });
+  };
+
+  const handleManualPromotion = async (studentIds: string[], reason: string) => {
+    setConfirmDialog({
+      isOpen: true,
+      type: "warning",
+      title: "Manual Promotion",
+      message: `You are about to manually promote <strong>${studentIds.length} student(s)</strong> from Semester ${selectedSemester}.<br/><br/>
+              <strong>Reason:</strong> ${reason}<br/><br/>
+              These students passed their main assignments but have low attendance. Manual promotion overrides the attendance requirement.<br/><br/>
+              <strong>This action cannot be undone.</strong>`,
+      onConfirm: () => manuallyPromoteApi("/admin/manual-promote", {
+        studentIds,
+        semester: parseInt(selectedSemester),
+        reason: reason.trim()
+      }),
+      data: { studentIds, reason }
+    });
+  };
+
   // Modal handlers
   const openEditModal = (student: SetStateAction<null>) => {
     setSelectedStudent(student);
@@ -299,7 +361,8 @@ export default function AdminStudents() {
       type: "info",
       title: "Approve Student",
       message: `Are you sure you want to approve <strong>${student.fullName}</strong>? They will be able to access the system immediately.`,
-      onConfirm: () => handleApproveStudent(student)
+      onConfirm: () => handleApproveStudent(student),
+      data: null
     });
   };
 
@@ -309,7 +372,8 @@ export default function AdminStudents() {
       type: "danger",
       title: "Delete Student",
       message: `Are you sure you want to delete <strong>${student.fullName}</strong>? This action cannot be undone.`,
-      onConfirm: () => handleDeleteStudent(student)
+      onConfirm: () => handleDeleteStudent(student),
+      data: null
     });
   };
 
@@ -446,13 +510,22 @@ export default function AdminStudents() {
                 Manage all students in the semester system
               </p>
             </div>
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <UserPlus className="w-4 h-4" />
-              Add Student
-            </button>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowPromotionModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+              >
+                <BarChart3 className="w-4 h-4" />
+                Promotion Report
+              </button>
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <UserPlus className="w-4 h-4" />
+                Add Student
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
@@ -493,6 +566,89 @@ export default function AdminStudents() {
             />
           </div>
 
+          {/* Promotion Section */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            {/* Auto Promotion Card */}
+            <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl shadow-lg p-6 text-white">
+              <div className="flex items-center gap-3 mb-4">
+                <TrendingUp className="w-8 h-8" />
+                <div>
+                  <h3 className="text-xl font-bold">Automatic Promotion</h3>
+                  <p className="text-blue-100">Promote eligible students automatically</p>
+                </div>
+              </div>
+              
+              <div className="space-y-3 mb-4">
+                <div className="flex items-center gap-2 text-sm">
+                  <CheckCircle className="w-4 h-4" />
+                  <span>75%+ attendance required</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <CheckCircle className="w-4 h-4" />
+                  <span>40+ marks in all main assignments</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <Clock className="w-4 h-4" />
+                  <span>Processes entire semester at once</span>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <select
+                  value={selectedSemester}
+                  onChange={(e) => setSelectedSemester(e.target.value)}
+                  className="flex-1 px-3 py-2 bg-white/20 rounded-lg border border-white/30 text-white focus:ring-2 focus:ring-white focus:border-transparent"
+                >
+                  {[1,2,3,4,5,6,7,8].map(sem => (
+                    <option key={sem} value={sem.toString()} className="text-gray-900">
+                      Semester {sem}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => handlePromoteSemester(selectedSemester)}
+                  className="px-6 py-2 bg-white text-blue-600 rounded-lg hover:bg-gray-100 transition-colors font-semibold"
+                >
+                  Run Promotion
+                </button>
+              </div>
+            </div>
+
+            {/* Manual Promotion Card */}
+            <div className="bg-gradient-to-r from-purple-500 to-purple-600 rounded-xl shadow-lg p-6 text-white">
+              <div className="flex items-center gap-3 mb-4">
+                <Award className="w-8 h-8" />
+                <div>
+                  <h3 className="text-xl font-bold">Promotion Report</h3>
+                  <p className="text-purple-100">Detailed eligibility and manual promotion</p>
+                </div>
+              </div>
+              
+              <div className="space-y-3 mb-4">
+                <div className="flex items-center gap-2 text-sm">
+                  <BarChart3 className="w-4 h-4" />
+                  <span>View detailed promotion analytics</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <AlertCircle className="w-4 h-4" />
+                  <span>Manage manual promotions with reasons</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <CheckCircle className="w-4 h-4" />
+                  <span>Track all student eligibility status</span>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setShowPromotionModal(true)}
+                className="w-full px-6 py-3 bg-white text-purple-600 rounded-lg hover:bg-gray-100 transition-colors font-semibold"
+              >
+                Open Promotion Report
+              </button>
+            </div>
+          </div>
+
+          {/* Auto Assign Groups Card */}
           <div className="bg-gradient-to-r from-purple-500 via-purple-600 to-blue-600 rounded-xl shadow-lg p-6 text-white mb-6">
             <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
               <div className="flex-1">
@@ -545,6 +701,7 @@ export default function AdminStudents() {
             </div>
           </div>
 
+          {/* Filters and Table */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="relative">
@@ -600,6 +757,7 @@ export default function AdminStudents() {
         </div>
       </main>
 
+      {/* Modals */}
       <ConfirmDialog
         isOpen={confirmDialog.isOpen}
         onClose={() => setConfirmDialog({ ...confirmDialog, isOpen: false })}
@@ -607,7 +765,12 @@ export default function AdminStudents() {
         title={confirmDialog.title}
         message={confirmDialog.message}
         type={confirmDialog.type}
-        confirmText={confirmDialog.type === "info" ? "Approve" : "Delete"}
+        confirmText={
+          confirmDialog.type === "info" ? "Run Promotion" :
+          confirmDialog.type === "warning" ? "Promote Students" :
+          "Confirm"
+        }
+        cancelText="Cancel"
       />
 
       <UserFormModal
@@ -675,6 +838,16 @@ export default function AdminStudents() {
           </div>
         </div>
       )}
+
+      {/* Promotion Modal */}
+      <PromotionModal
+        isOpen={showPromotionModal}
+        onClose={() => setShowPromotionModal(false)}
+        selectedSemester={selectedSemester}
+        onSemesterChange={setSelectedSemester}
+        onPromoteSemester={handlePromoteSemester}
+        onManualPromotion={handleManualPromotion}
+      />
     </div>
   );
 }
