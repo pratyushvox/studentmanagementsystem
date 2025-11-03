@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
-import Subject from "../../src/models/Subject.js";
-import User from "../../src/models/User.js";
-import { bitSubjects } from "../data/subjects.js";
+import Subject from "../../src/models/Subject.js"; // Add .js
+import User from "../../src/models/User.js"; // Add .js
+import { bitSubjects } from "../data/subjects.js"; // Add .js
 
 export const seedSubjects = async () => {
   try {
@@ -30,7 +30,7 @@ export const seedSubjects = async () => {
     // Step 4: Insert subjects
     console.log("📚 Inserting subjects...");
     const inserted = await Subject.insertMany(subjectsWithCreator);
-    console.log(` Successfully seeded ${inserted.length} subjects!\n`);
+    console.log(`✅ Successfully seeded ${inserted.length} subjects!\n`);
 
     // Step 5: Show breakdown by semester
     console.log("📊 Subjects per semester:");
@@ -57,7 +57,7 @@ export const seedSubjects = async () => {
 
     return inserted;
   } catch (error: any) {
-    console.error(" Error seeding subjects:", error.message);
+    console.error("❌ Error seeding subjects:", error.message);
     throw error;
   }
 };

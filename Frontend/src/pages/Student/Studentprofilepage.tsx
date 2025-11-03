@@ -12,22 +12,22 @@ export default function ProfileSetup() {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({
-    currentSemester: "",
-    enrollmentYear: new Date().getFullYear().toString(),
+ const [formData, setFormData] = useState({
+  currentSemester: "",
+  enrollmentYear: new Date().getFullYear().toString(),
+  phoneNumber: "",
+  dateOfBirth: "",
+  address: {
+    city: "",
+    province: "", 
+  },
+  bio: "",
+  guardian: {
+    name: "",
+    relationship: "",
     phoneNumber: "",
-    dateOfBirth: "",
-    address: {
-      city: "",
-      state: "" // Province
-    },
-    bio: "",
-    guardian: {
-      name: "",
-      relation: "",
-      phone: ""
-    }
-  });
+  },
+});
 
   const currentYear = new Date().getFullYear();
   const years = Array.from({ length: 10 }, (_, i) => currentYear - i);
@@ -244,13 +244,14 @@ export default function ProfileSetup() {
                       onChange={handleChange}
                       placeholder="City"
                     />
-                    <FormInput
-                      label="Province"
-                      name="address.state"
-                      value={formData.address.state}
-                      onChange={handleChange}
-                      placeholder="Province"
-                    />
+                   <FormInput
+  label="Province"
+  name="address.province"
+  value={formData.address.province}
+  onChange={handleChange}
+  placeholder="Province"
+/>
+
                   </div>
                 </div>
 
@@ -272,22 +273,21 @@ export default function ProfileSetup() {
                     />
 
                     <FormInput
-                      label="Relation"
-                      name="guardian.relation"
-                      value={formData.guardian.relation}
-                      onChange={handleChange}
-                      placeholder="Father, Mother, etc."
-                      required
-                    />
-
-                    <FormInput
-                      label="Guardian Phone"
-                      name="guardian.phone"
-                      value={formData.guardian.phone}
-                      onChange={handleChange}
-                      placeholder="+977 98XXXXXXXX"
-                      required
-                    />
+    label="Relationship"
+    name="guardian.relationship"  
+    value={formData.guardian.relationship}
+    onChange={handleChange}
+    placeholder="Father, Mother, etc."
+    required
+  />
+                   <FormInput
+    label="Guardian Phone"
+    name="guardian.phoneNumber"   
+    value={formData.guardian.phoneNumber}
+    onChange={handleChange}
+    placeholder="+977 98XXXXXXXX"
+    required
+  />
                   </div>
                 </div>
 

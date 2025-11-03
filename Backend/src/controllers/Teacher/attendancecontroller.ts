@@ -1,4 +1,4 @@
-// controllers/attendanceController.ts
+// controllers/Teacher/attendancecontroller.ts
 import { Request, Response } from "express";
 import Attendance from "../../models/Attendance";
 import Group from "../../models/Group";
@@ -23,41 +23,167 @@ export const getTeacherAttendanceSetup = async (req: Request, res: Response) => 
       "subjectTeachers.teacherId": teacher._id,
       isActive: true
     })
-    .populate("students", "studentId userId")
     .populate({
-      path: "subjectTeachers",
-      match: { teacherId: teacher._id },
+      path: "students",
+      select: "studentId userId currentSemester enrollmentYear status",
       populate: {
-        path: "subjectId",
-        select: "code name credits"
+        path: "userId",
+        select: "fullName email"
       }
+    })
+    .populate({
+      path: "subjectTeachers.subjectId",
+      select: "code name credits"
     })
     .select("name semester academicYear students subjectTeachers")
     .lean();
 
     // Transform the data for frontend
-    const attendanceSetup = groups.map(group => ({
-      groupId: group._id,
-      groupName: group.name,
-      semester: group.semester,
-      academicYear: group.academicYear,
-      students: group.students,
-      subjects: group.subjectTeachers
+    const attendanceSetup = groups.map(group => {
+      // Filter subject teachers to only include this teacher's assignments
+      const teacherSubjects = (group.subjectTeachers as any[])
         .filter((st: any) => st.teacherId.toString() === teacher._id.toString())
         .map((st: any) => ({
           subjectId: st.subjectId._id,
           subjectCode: st.subjectId.code,
           subjectName: st.subjectId.name,
           credits: st.subjectId.credits
-        }))
-    }));
+        }));
+
+      // Transform students data
+      const students = (group.students || []).map((student: any) => ({
+        _id: student._id,
+        studentId: student.studentId,
+        fullName: student.userId?.fullName || 'N/A',
+        email: student.userId?.email || 'N/A',
+        currentSemester: student.currentSemester,
+        enrollmentYear: student.enrollmentYear,
+        status: student.status
+      }));
+
+      return {
+        groupId: group._id,
+        groupName: group.name,
+        semester: group.semester,
+        academicYear: group.academicYear,
+        students: students,
+        subjects: teacherSubjects
+      };
+    });
 
     res.json({
       message: "Attendance setup fetched successfully",
       data: attendanceSetup
     });
   } catch (err: any) {
+    console.error("Error in getTeacherAttendanceSetup:", err);
     res.status(500).json({ message: err.message });
+  }
+};
+
+// Get students for a specific group (with subject validation) - FIXED VERSION
+export const getGroupStudentsForAttendance = async (req: Request, res: Response) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ message: "User not authenticated" });
+    }
+
+    const teacher = await Teacher.findOne({ userId: req.user._id });
+    if (!teacher) {
+      return res.status(404).json({ message: "Teacher not found" });
+    }
+
+    const { groupId } = req.params;
+    const { subjectId } = req.query;
+
+    if (!subjectId) {
+      return res.status(400).json({ message: "Subject ID is required" });
+    }
+
+    console.log("🔍 === ATTENDANCE DEBUG START ===");
+    console.log("📋 Request Details:", {
+      groupId,
+      subjectId,
+      teacherId: teacher._id,
+      teacherName: teacher.userId?.fullName
+    });
+
+    // ✅ FIX: Use proper population for students
+    const group = await Group.findOne({
+      _id: groupId,
+      isActive: true,
+      subjectTeachers: {
+        $elemMatch: {
+          subjectId: subjectId,
+          teacherId: teacher._id
+        }
+      }
+    })
+    .populate({
+      path: "students", // ✅ FIXED: Proper population
+      select: "studentId userId currentSemester enrollmentYear status phoneNumber dateOfBirth",
+      populate: {
+        path: "userId",
+        select: "fullName email"
+      }
+    })
+    .populate('subjectTeachers.subjectId', 'name code')
+    .populate('subjectTeachers.teacherId', 'userId')
+    .lean();
+
+    console.log("📊 Group Query Result:", group ? "FOUND" : "NOT FOUND");
+
+    if (!group) {
+      console.log("❌ Group not found or teacher not assigned");
+      return res.status(403).json({ 
+        message: "You are not assigned to teach any subject in this group" 
+      });
+    }
+
+    // ✅ FIX: Directly use populated students from group
+    let students = [];
+    if (group.students && group.students.length > 0) {
+      console.log("✅ Using populated students from group");
+      students = (group.students as any[]).map(student => ({
+        _id: student._id,
+        studentId: student.studentId,
+        fullName: student.userId?.fullName || 'N/A',
+        email: student.userId?.email || 'N/A',
+        currentSemester: student.currentSemester,
+        enrollmentYear: student.enrollmentYear,
+        status: student.status,
+        phoneNumber: student.phoneNumber,
+        dateOfBirth: student.dateOfBirth
+      }));
+    }
+
+    console.log("📈 Group Analysis:", {
+      groupName: group.name,
+      semester: group.semester,
+      studentCount: group.students?.length || 0,
+      studentsFound: students.length,
+      studentDetails: students.map(s => ({
+        id: s._id,
+        name: s.fullName,
+        studentId: s.studentId
+      }))
+    });
+
+    console.log("✅ === ATTENDANCE DEBUG END ===");
+
+    res.json({
+      message: students.length > 0 
+        ? "Students fetched successfully" 
+        : "No students found in this group",
+      students: students
+    });
+
+  } catch (err: any) {
+    console.error('❌ ERROR in getGroupStudentsForAttendance:', err);
+    res.status(500).json({ 
+      message: err.message,
+      error: "Internal server error in attendance system"
+    });
   }
 };
 
@@ -80,10 +206,23 @@ export const markAttendance = async (req: Request, res: Response) => {
       attendanceRecords
     } = req.body;
 
+    // Validate required fields
+    if (!date || !subjectId || !groupId || !attendanceRecords) {
+      return res.status(400).json({ 
+        message: "Missing required fields: date, subjectId, groupId, attendanceRecords" 
+      });
+    }
+
+    if (!Array.isArray(attendanceRecords) || attendanceRecords.length === 0) {
+      return res.status(400).json({ 
+        message: "Attendance records must be a non-empty array" 
+      });
+    }
+
     // Validate that teacher is assigned to this subject and group
     const group = await Group.findOne({
       _id: groupId,
-      "subjectTeachers": {
+      subjectTeachers: {
         $elemMatch: {
           subjectId: subjectId,
           teacherId: teacher._id
@@ -158,6 +297,7 @@ export const markAttendance = async (req: Request, res: Response) => {
       attendance: populatedAttendance
     });
   } catch (err: any) {
+    console.error("Error in markAttendance:", err);
     res.status(500).json({ message: err.message });
   }
 };
@@ -175,6 +315,12 @@ export const getAttendanceByDate = async (req: Request, res: Response) => {
     }
 
     const { date, subjectId, groupId } = req.query;
+
+    if (!date || !subjectId || !groupId) {
+      return res.status(400).json({ 
+        message: "Missing required query parameters: date, subjectId, groupId" 
+      });
+    }
 
     const attendance = await Attendance.findOne({
       date: new Date(date as string),
@@ -204,6 +350,7 @@ export const getAttendanceByDate = async (req: Request, res: Response) => {
       attendance
     });
   } catch (err: any) {
+    console.error("Error in getAttendanceByDate:", err);
     res.status(500).json({ message: err.message });
   }
 };
@@ -222,30 +369,39 @@ export const getAttendanceHistory = async (req: Request, res: Response) => {
 
     const { subjectId, groupId, month, year } = req.query;
     
+    if (!subjectId || !groupId) {
+      return res.status(400).json({ 
+        message: "Missing required query parameters: subjectId, groupId" 
+      });
+    }
+
     let query: any = {
       subjectId,
       groupId,
-      teacherId: teacher._id
+      teacherId: teacher._id,
+      isSubmitted: true
     };
 
     // Filter by month and year if provided
     if (month && year) {
       const startDate = new Date(parseInt(year as string), parseInt(month as string) - 1, 1);
-      const endDate = new Date(parseInt(year as string), parseInt(month as string), 0);
+      const endDate = new Date(parseInt(year as string), parseInt(month as string), 0, 23, 59, 59, 999);
       query.date = { $gte: startDate, $lte: endDate };
     }
 
     const attendanceHistory = await Attendance.find(query)
       .populate("subjectId", "code name")
       .populate("groupId", "name")
-      .select("date totalPresent totalAbsent totalLate totalStudents isSubmitted")
-      .sort({ date: -1 });
+      .select("date totalPresent totalAbsent totalLate totalStudents isSubmitted submittedAt")
+      .sort({ date: -1 })
+      .lean();
 
     res.json({
       message: "Attendance history fetched successfully",
       attendanceHistory
     });
   } catch (err: any) {
+    console.error("Error in getAttendanceHistory:", err);
     res.status(500).json({ message: err.message });
   }
 };
@@ -255,6 +411,12 @@ export const getStudentAttendanceSummary = async (req: Request, res: Response) =
   try {
     const { studentId, subjectId, groupId } = req.query;
 
+    if (!studentId || !subjectId || !groupId) {
+      return res.status(400).json({ 
+        message: "Missing required query parameters: studentId, subjectId, groupId" 
+      });
+    }
+
     const attendanceRecords = await Attendance.find({
       "attendanceRecords.studentId": studentId,
       subjectId,
@@ -262,40 +424,35 @@ export const getStudentAttendanceSummary = async (req: Request, res: Response) =
       isSubmitted: true
     })
     .select("date attendanceRecords")
-    .sort({ date: 1 });
+    .sort({ date: 1 })
+    .lean();
 
     const summary = {
       totalClasses: attendanceRecords.length,
-      present: attendanceRecords.filter(record => 
-        record.attendanceRecords.some(ar => 
-          ar.studentId.toString() === studentId && 
-          (ar.status === "present" || ar.status === "late")
-        )
-      ).length,
-      absent: attendanceRecords.filter(record => 
-        record.attendanceRecords.some(ar => 
-          ar.studentId.toString() === studentId && 
-          ar.status === "absent"
-        )
-      ).length,
-      late: attendanceRecords.filter(record => 
-        record.attendanceRecords.some(ar => 
-          ar.studentId.toString() === studentId && 
-          ar.status === "late"
-        )
-      ).length,
-      excused: attendanceRecords.filter(record => 
-        record.attendanceRecords.some(ar => 
-          ar.studentId.toString() === studentId && 
-          ar.status === "excused"
-        )
-      ).length,
+      present: 0,
+      absent: 0,
+      late: 0,
+      excused: 0,
       attendancePercentage: 0
     };
 
+    attendanceRecords.forEach(record => {
+      const studentRecord = record.attendanceRecords.find(
+        (ar: any) => ar.studentId.toString() === studentId
+      );
+      
+      if (studentRecord) {
+        if (studentRecord.status === "present") summary.present++;
+        else if (studentRecord.status === "absent") summary.absent++;
+        else if (studentRecord.status === "late") summary.late++;
+        else if (studentRecord.status === "excused") summary.excused++;
+      }
+    });
+
     if (summary.totalClasses > 0) {
+      // Calculate percentage: (present + late) / total * 100
       summary.attendancePercentage = Math.round(
-        (summary.present / summary.totalClasses) * 100
+        ((summary.present + summary.late) / summary.totalClasses) * 100
       );
     }
 
@@ -304,6 +461,7 @@ export const getStudentAttendanceSummary = async (req: Request, res: Response) =
       summary
     });
   } catch (err: any) {
+    console.error("Error in getStudentAttendanceSummary:", err);
     res.status(500).json({ message: err.message });
   }
 };
@@ -320,7 +478,13 @@ export const markBulkAttendance = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "Teacher not found" });
     }
 
-    const { attendanceData } = req.body; // Array of { date, subjectId, groupId, attendanceRecords }
+    const { attendanceData } = req.body;
+
+    if (!Array.isArray(attendanceData) || attendanceData.length === 0) {
+      return res.status(400).json({ 
+        message: "attendanceData must be a non-empty array" 
+      });
+    }
 
     const results = [];
 
@@ -330,7 +494,7 @@ export const markBulkAttendance = async (req: Request, res: Response) => {
       // Validate teacher assignment
       const group = await Group.findOne({
         _id: groupId,
-        "subjectTeachers": {
+        subjectTeachers: {
           $elemMatch: {
             subjectId: subjectId,
             teacherId: teacher._id
@@ -402,6 +566,7 @@ export const markBulkAttendance = async (req: Request, res: Response) => {
       results
     });
   } catch (err: any) {
+    console.error("Error in markBulkAttendance:", err);
     res.status(500).json({ message: err.message });
   }
 };

@@ -19,7 +19,7 @@ import { LoadingSpinner, ErrorDisplay, EmptyState } from '../../components/Loadi
 import AttendanceTable from '../../components/Attendancetable';
 import { formatDate, formatTimeAgo } from '../../utils/dateHelpers';
 
-// Types (same as before)
+// Types
 interface Subject {
   _id: string;
   code: string;
@@ -109,13 +109,16 @@ const TeacherAttendancePage = () => {
     refetch: refetchDashboard 
   } = useApiGet('/teacher/dashboard', { autoFetch: true });
 
-  // Fetch students for selected group
+  // ✅ FIXED: Fetch students using the correct teacher route
   const { 
     data: studentsResponse, 
     loading: studentsLoading,
+    error: studentsError,
     refetch: refetchStudents 
   } = useApiGet(
-    selectedGroup ? `/teacher/groups/${selectedGroup}/students` : null,
+    selectedGroup && selectedSubject 
+      ? `/teacher/groups/${selectedGroup}/students?subjectId=${selectedSubject}` // ✅ CORRECT ROUTE
+      : null,
     { autoFetch: false }
   );
 
@@ -144,6 +147,8 @@ const TeacherAttendancePage = () => {
 
   const dashboard: TeacherDashboard = dashboardResponse?.dashboard;
   const attendanceHistory = historyResponse?.attendanceHistory || [];
+  
+  // ✅ FIXED: Extract students from the correct response structure
   const students: Student[] = studentsResponse?.students || [];
 
   // Extract assigned subjects and groups from dashboard
@@ -159,23 +164,29 @@ const TeacherAttendancePage = () => {
     return groups;
   }, []);
 
-  // Get subjects for selected group
+  // Get subjects for selected group - only subjects where teacher is assigned to teach this specific group
   const subjectsForSelectedGroup = selectedGroup 
-    ? assignedSubjects.filter(subject => 
-        subject.groups.some(group => group._id === selectedGroup)
-      )
+    ? assignedSubjects
+        .filter(subject => 
+          subject.groups.some(group => group._id === selectedGroup)
+        )
+        .map(subject => ({
+          ...subject,
+          // Filter to only include the selected group in the groups array
+          groups: subject.groups.filter(g => g._id === selectedGroup)
+        }))
     : [];
 
-  // Initialize attendance records when group or date changes
+  // Initialize attendance records when group, subject, or date changes
   useEffect(() => {
-    if (selectedGroup && selectedDate) {
+    if (selectedGroup && selectedSubject && selectedDate) {
       refetchStudents();
     }
-  }, [selectedGroup, selectedDate]);
+  }, [selectedGroup, selectedSubject, selectedDate]);
 
   // Initialize attendance records when students data is loaded
   useEffect(() => {
-    if (students.length > 0 && selectedGroup && selectedDate) {
+    if (students.length > 0 && selectedGroup && selectedSubject && selectedDate) {
       const initialRecords: Record<string, AttendanceRecord> = {};
       students.forEach(student => {
         initialRecords[student._id] = {
@@ -186,7 +197,7 @@ const TeacherAttendancePage = () => {
       });
       setAttendanceRecords(initialRecords);
     }
-  }, [students, selectedGroup, selectedDate]);
+  }, [students, selectedGroup, selectedSubject, selectedDate]);
 
   // Load history when filters change
   useEffect(() => {
@@ -254,6 +265,35 @@ const TeacherAttendancePage = () => {
     return counts;
   };
 
+  // Calculate derived data
+  const selectedGroupData = allGroups.find(g => g._id === selectedGroup);
+  const selectedSubjectData = subjectsForSelectedGroup.find(s => s.subjectId._id === selectedSubject);
+  const statusCounts = getStatusCounts();
+
+  // Debug logging - Enhanced
+  useEffect(() => {
+    console.log('=== DEBUGGING ATTENDANCE ===');
+    console.log('Selected Group:', selectedGroup);
+    console.log('Selected Group Data:', selectedGroupData);
+    console.log('Selected Subject:', selectedSubject);
+    console.log('Selected Subject Data:', selectedSubjectData);
+    console.log('All Assigned Subjects:', assignedSubjects);
+    console.log('Subjects for Selected Group:', subjectsForSelectedGroup);
+    console.log('Students loaded:', students.length);
+    console.log('Students Response:', studentsResponse);
+    console.log('Students Error:', studentsError);
+    console.log('API URL:', selectedGroup && selectedSubject ? `/teacher/groups/${selectedGroup}/students?subjectId=${selectedSubject}` : 'N/A');
+    
+    // ✅ ADDED: Debug student data
+    if (students.length > 0) {
+      console.log('Student Details:', students.map(s => ({
+        id: s._id,
+        name: s.fullName,
+        studentId: s.studentId
+      })));
+    }
+  }, [selectedGroup, selectedSubject, students, studentsResponse, studentsError, selectedGroupData, selectedSubjectData, assignedSubjects, subjectsForSelectedGroup]);
+
   if (dashboardLoading) {
     return (
       <>
@@ -281,10 +321,6 @@ const TeacherAttendancePage = () => {
       </>
     );
   }
-
-  const selectedGroupData = allGroups.find(g => g._id === selectedGroup);
-  const selectedSubjectData = subjectsForSelectedGroup.find(s => s.subjectId._id === selectedSubject);
-  const statusCounts = getStatusCounts();
 
   return (
     <>
@@ -381,6 +417,7 @@ const TeacherAttendancePage = () => {
                   onChange={(e) => {
                     setSelectedGroup(e.target.value);
                     setSelectedSubject('');
+                    setAttendanceRecords({});
                   }}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 >
@@ -399,14 +436,17 @@ const TeacherAttendancePage = () => {
                 </label>
                 <select
                   value={selectedSubject}
-                  onChange={(e) => setSelectedSubject(e.target.value)}
+                  onChange={(e) => {
+                    setSelectedSubject(e.target.value);
+                    setAttendanceRecords({});
+                  }}
                   disabled={!selectedGroup}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:bg-gray-50"
                 >
                   <option value="">Select Subject</option>
                   {subjectsForSelectedGroup.map(subject => (
                     <option key={subject.subjectId._id} value={subject.subjectId._id}>
-                      {subject.subjectId.code} - {subject.subjectId.name}
+                      {subject.subjectId.code} - {subject.subjectId.name} (Sem {subject.semester})
                     </option>
                   ))}
                 </select>
@@ -438,8 +478,28 @@ const TeacherAttendancePage = () => {
               </div>
             </div>
 
+            
+            {/* Error Display */}
+            {studentsError && selectedGroup && selectedSubject && (
+              <div className="mb-4 p-4 bg-red-50 rounded-lg border border-red-200">
+                <div className="flex items-start gap-3">
+                  <XCircle className="text-red-600 flex-shrink-0 mt-0.5" size={20} />
+                  <div>
+                    <h3 className="font-semibold text-red-800">Failed to Load Students</h3>
+                    <p className="text-sm text-red-700 mt-1">{studentsError}</p>
+                    <button
+                      onClick={() => refetchStudents()}
+                      className="mt-2 text-sm text-red-700 underline hover:text-red-800"
+                    >
+                      Try Again
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Attendance Table Component */}
-            {selectedGroup && selectedSubject && (
+            {selectedGroup && selectedSubject && !studentsError && (
               <AttendanceTable
                 students={students}
                 attendanceRecords={attendanceRecords}
@@ -451,6 +511,15 @@ const TeacherAttendancePage = () => {
                 selectedDate={selectedDate}
                 readOnly={false}
               />
+            )}
+
+            {/* No Students Message */}
+            {selectedGroup && selectedSubject && students.length === 0 && !studentsLoading && !studentsError && (
+              <div className="text-center py-8 text-gray-500">
+                <Users size={48} className="mx-auto mb-3 text-gray-300" />
+                <p className="text-lg font-medium">No students found</p>
+                <p className="text-sm">There are no students enrolled in this group and subject combination.</p>
+              </div>
             )}
           </div>
 

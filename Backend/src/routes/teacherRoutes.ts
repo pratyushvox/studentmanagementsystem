@@ -50,6 +50,7 @@ import {
 // Attendance Management
 import {
   getTeacherAttendanceSetup,
+  getGroupStudentsForAttendance,
   markAttendance,
   getAttendanceByDate,
   getAttendanceHistory,
@@ -92,9 +93,6 @@ router.get("/groups/my-groups", protect, teacherOnly, getMyGroups);
 
 // Get teacher's groups with detailed information
 router.get("/groups/my-groups/detailed", protect, teacherOnly, getMyGroupsWithDetails);
-
-// Get students from a specific group (teacher must be assigned to that group)
-router.get("/groups/:groupId/students", protect, teacherOnly, getGroupStudents);
 
 // Get specific student details (only if student is in teacher's assigned group)
 router.get("/groups/students/:studentId", protect, teacherOnly, getStudentDetails);
@@ -170,6 +168,10 @@ router.delete("/posts/:postId", protect, teacherOnly, deletePost);
 ============================================================ */
 // Get teacher's attendance setup (groups and subjects they teach)
 router.get("/attendance/setup", protect, teacherOnly, getTeacherAttendanceSetup);
+
+// IMPORTANT: This route MUST come before the generic /groups/:groupId/students route
+// Get students for attendance marking with subject validation
+router.get("/groups/:groupId/students", protect, teacherOnly, getGroupStudentsForAttendance);
 
 // Mark attendance for a specific date
 router.post("/attendance/mark", protect, teacherOnly, markAttendance);

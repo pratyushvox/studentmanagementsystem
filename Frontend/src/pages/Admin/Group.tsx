@@ -7,6 +7,8 @@ import ConfirmDialog from '../../components/Confirmationdialogue';
 import GroupDetailsModal from '../../components/GroupDetailsModal';
 import Navbar from '../../components/Navbar';
 import Sidebar from '../../components/Sidebar';
+import { toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 export default function GroupManagement() {
   const [activeItem, setActiveItem] = useState("groups");
@@ -32,7 +34,7 @@ export default function GroupManagement() {
 
   const { post: createGroup, loading: createLoading } = useApiPost({
     onSuccess: () => {
-      alert('Group created successfully!');
+      ('Group created successfully!');
       loadGroups();
       setShowCreateModal(false);
       setFormData({
@@ -47,7 +49,7 @@ export default function GroupManagement() {
 
   const { put: updateGroup, loading: editLoading } = useApiPut({
     onSuccess: () => {
-      alert('Group updated successfully!');
+      toast.success('Group updated successfully!');
       loadGroups();
       setShowEditModal(false);
       setFormData({

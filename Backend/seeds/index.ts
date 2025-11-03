@@ -1,17 +1,21 @@
 import mongoose from "mongoose";
 import dotenv from "dotenv";
-import { seedSubjects } from "./seeders/subjectSeeder";
+import { seedSubjects } from "./seeders/subjectSeeder.js"; // Add .js extension
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 dotenv.config();
 
-// ✅ Use the same variable name consistently
 const MONGODB_URI = process.env.MONGO_URI;
 
 const runSeeders = async () => {
   try {
     // Connect to MongoDB
     console.log("🔌 Connecting to MongoDB...");
-    await mongoose.connect(MONGODB_URI!); // <-- use MONGODB_URI, not MONGO_URI
+    await mongoose.connect(MONGODB_URI!);
     console.log("✅ Connected to MongoDB\n");
     console.log("=".repeat(60));
     console.log();

@@ -1,8 +1,12 @@
+import mongoose from "mongoose";
 import { Request, Response } from "express";
 import Subject from "../../models/Subject";
 import Teacher from "../../models/Teacher";
 import Group from "../../models/Group";
 import Assignment from "../../models/Assignment";
+
+
+
 
 // Create new subject
 export const createSubject = async (req: Request, res: Response) => {
@@ -209,18 +213,133 @@ export const getAllSubjects = async (_req: Request, res: Response) => {
   }
 };
 
-// Assign subject to teacher (for teaching groups)
-// Assign subject to teacher (for teaching groups)
 export const assignSubjectToTeacher = async (req: Request, res: Response) => {
   try {
     const { teacherId } = req.params;
     const { subjectId, groups } = req.body;
 
     if (!subjectId) {
-      return res.status(400).json({ 
-        message: "Subject ID is required" 
+      return res.status(400).json({ message: "Subject ID is required" });
+    }
+
+    if (!groups || !Array.isArray(groups) || groups.length === 0) {
+      return res.status(400).json({ message: "At least one group must be selected" });
+    }
+
+    // ✅ Convert to ObjectIds
+    const subjectObjectId = new mongoose.Types.ObjectId(subjectId);
+    const teacherObjectId = new mongoose.Types.ObjectId(teacherId);
+
+    // ✅ Validate teacher and subject
+    const teacher = await Teacher.findById(teacherObjectId);
+    if (!teacher) {
+      return res.status(404).json({ message: "Teacher not found" });
+    }
+
+    const subject = await Subject.findById(subjectObjectId);
+    if (!subject) {
+      return res.status(404).json({ message: "Subject not found" });
+    }
+
+    // ✅ Validate groups (must exist, active, and match semester)
+    const verifiedGroups = await Group.find({
+      _id: { $in: groups },
+      semester: subject.semester,
+      isActive: true,
+    });
+
+    if (verifiedGroups.length !== groups.length) {
+      return res.status(400).json({
+        message: "Some groups are invalid, inactive, or don't match the subject's semester",
       });
     }
+
+    const groupUpdates: any[] = [];
+
+    // ✅ Process each group atomically
+    for (const groupId of groups) {
+      const groupObjectId = new mongoose.Types.ObjectId(groupId);
+
+      // Step 1: Remove existing entry for this subject (avoid duplicates)
+      await Group.updateOne(
+        { _id: groupObjectId },
+        { $pull: { subjectTeachers: { subjectId: subjectObjectId } } }
+      );
+
+      // Step 2: Add the new subject-teacher pair
+      const updateResult = await Group.updateOne(
+        { _id: groupObjectId },
+        {
+          $addToSet: {
+            subjectTeachers: {
+              subjectId: subjectObjectId,
+              teacherId: teacherObjectId,
+              assignedAt: new Date(),
+            },
+          },
+        }
+      );
+
+      // Log / Track status
+      const updatedGroup = await Group.findById(groupObjectId).select("name subjectTeachers");
+      groupUpdates.push({
+        groupId: groupObjectId,
+        groupName: updatedGroup?.name,
+        status: updateResult.modifiedCount > 0 ? "updated" : "no_change",
+        subjectTeachersCount: updatedGroup?.subjectTeachers.length || 0,
+      });
+    }
+
+    // ✅ Update teacher's assignedSubjects
+    const existingAssignmentIndex = teacher.assignedSubjects.findIndex(
+      (s: any) => s.subjectId.toString() === subjectObjectId.toString()
+    );
+
+    if (existingAssignmentIndex !== -1) {
+      // Update existing assignment
+      teacher.assignedSubjects[existingAssignmentIndex].groups = groups;
+      teacher.assignedSubjects[existingAssignmentIndex].assignedAt = new Date();
+    } else {
+      // Add new subject assignment
+      teacher.assignedSubjects.push({
+        subjectId: subjectObjectId,
+        semester: subject.semester,
+        groups: groups,
+        assignedAt: new Date(),
+      });
+    }
+
+    await teacher.save();
+
+    // ✅ Return updated teacher info
+    const updatedTeacher = await Teacher.findById(teacherObjectId)
+      .populate("userId", "fullName email")
+      .populate({
+        path: "assignedSubjects.subjectId",
+        select: "name code credits semester",
+      })
+      .populate({
+        path: "assignedSubjects.groups",
+        select: "name semester capacity studentCount",
+      });
+
+    return res.status(200).json({
+      message: "Subject assigned to teacher successfully",
+      teacher: updatedTeacher,
+      groupUpdates,
+    });
+  } catch (error: any) {
+    console.error("❌ Error assigning subject to teacher:", error);
+    return res.status(500).json({
+      message: "Failed to assign subject",
+      error: error.message,
+    });
+  }
+};
+// 🔥 NEW: Remove subject assignment from teacher
+export const removeSubjectFromTeacher = async (req: Request, res: Response) => {
+  try {
+    const { teacherId, subjectId } = req.params;
 
     const teacher = await Teacher.findById(teacherId);
     if (!teacher) {
@@ -232,74 +351,44 @@ export const assignSubjectToTeacher = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "Subject not found" });
     }
 
-    // Check if subject already assigned
-    const existingAssignment = teacher.assignedSubjects.find(
-      (s) => s.subjectId.toString() === subjectId
+    // Find the assignment to get the groups
+    const assignment = teacher.assignedSubjects.find(
+      (s: any) => s.subjectId.toString() === subjectId
     );
 
-    if (existingAssignment) {
-      return res.status(400).json({ 
-        message: "Subject already assigned to this teacher" 
-      });
+    if (!assignment) {
+      return res.status(404).json({ message: "Subject not assigned to this teacher" });
     }
 
-    // Verify groups exist and belong to the subject's semester
-    if (groups && groups.length > 0) {
-      const verifiedGroups = await Group.find({
-        _id: { $in: groups },
-        semester: subject.semester
-      });
-
-      if (verifiedGroups.length !== groups.length) {
-        return res.status(400).json({
-          message: "Some groups are invalid or don't match the subject's semester"
-        });
-      }
-
-      // 🔥 FIX: Update group's subjectTeachers array PROPERLY
-      for (const groupId of groups) {
-        const group = await Group.findById(groupId);
-        if (group) {
-          // Check if this subject-teacher combination already exists in the group
-          const existingSubjectTeacher = group.subjectTeachers.find(
-            st => st.subjectId.toString() === subjectId && st.teacherId.toString() === teacherId
-          );
-
-          if (!existingSubjectTeacher) {
-            // Add new subject-teacher assignment to the group
-            group.subjectTeachers.push({
-              subjectId: subject._id,
-              teacherId: teacher._id,
-              assignedAt: new Date()
-            });
-            await group.save();
-          }
-        }
+    // Remove subject-teacher from all groups
+    const groupUpdates = [];
+    for (const groupId of assignment.groups) {
+      const group = await Group.findById(groupId);
+      if (group) {
+        // Remove this subject-teacher combination from group
+        group.subjectTeachers = group.subjectTeachers.filter(
+          (st: any) => !(st.subjectId.toString() === subjectId && st.teacherId.toString() === teacherId)
+        );
+        await group.save();
+        groupUpdates.push({ groupId: group._id, groupName: group.name, status: "removed" });
       }
     }
 
-    // Add to teacher's assignedSubjects
-    teacher.assignedSubjects.push({
-      subjectId,
-      semester: subject.semester,
-      groups: groups || []
-    });
+    // Remove assignment from teacher
+    teacher.assignedSubjects = teacher.assignedSubjects.filter(
+      (s: any) => s.subjectId.toString() !== subjectId
+    );
 
     await teacher.save();
 
-    const updatedTeacher = await Teacher.findById(teacherId)
-      .populate("userId", "fullName email")
-      .populate("assignedSubjects.subjectId", "name code moduleLeader")
-      .populate("assignedSubjects.groups", "name semester");
-
     res.status(200).json({
-      message: "Subject assigned to teacher successfully",
-      teacher: updatedTeacher
+      message: "Subject removed from teacher successfully",
+      groupUpdates: groupUpdates
     });
   } catch (error: any) {
-    console.error("Error assigning subject to teacher:", error);
+    console.error("Error removing subject from teacher:", error);
     res.status(500).json({
-      message: "Failed to assign subject",
+      message: "Failed to remove subject assignment",
       error: error.message
     });
   }
@@ -356,13 +445,15 @@ export const getSubjectById = async (req: Request, res: Response) => {
         department: teacher.department,
         specialization: teacher.specialization,
         groupsAssigned: subjectAssignment?.groups || [],
+        assignedAt: subjectAssignment?.assignedAt,
         isModuleLeader: teacher.isModuleLeader
       };
     });
 
-    // Get available groups for this semester
+    // Get available groups for this semester with subject teachers populated
     const groups = await Group.find({ semester: subject.semester })
-      .populate("subjectTeachers.teacherId", "fullName")
+      .populate("subjectTeachers.teacherId", "fullName email teacherId")
+      .populate("subjectTeachers.subjectId", "name code")
       .select("name semester capacity studentCount students subjectTeachers");
 
     // Get assignments statistics
@@ -381,7 +472,7 @@ export const getSubjectById = async (req: Request, res: Response) => {
       subject: {
         ...subject.toObject(),
         assignedTeachers,
-        assignedGroups: groups,
+        groups,
         mainAssignments,
         weeklyAssignments
       }
@@ -467,6 +558,12 @@ export const deleteSubject = async (req: Request, res: Response) => {
       }
     }
 
+    // Remove this subject from all groups' subjectTeachers
+    await Group.updateMany(
+      { "subjectTeachers.subjectId": id },
+      { $pull: { subjectTeachers: { subjectId: id } } }
+    );
+
     await Subject.findByIdAndDelete(id);
 
     res.status(200).json({ message: "Subject deleted successfully" });
@@ -525,7 +622,6 @@ export const getSubjectStatistics = async (_req: Request, res: Response) => {
   }
 };
 
-
 export const getModuleLeaderSubjects = async (req: Request, res: Response) => {
   try {
     const { teacherId } = req.params;
@@ -542,6 +638,34 @@ export const getModuleLeaderSubjects = async (req: Request, res: Response) => {
     res.status(200).json({
       message: "Module leader subjects fetched successfully",
       subjects
+    });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// 🔥 NEW: Get teachers available for subject assignment
+export const getAvailableTeachersForSubject = async (req: Request, res: Response) => {
+  try {
+    const { subjectId } = req.params;
+
+    const subject = await Subject.findById(subjectId);
+    if (!subject) {
+      return res.status(404).json({ message: "Subject not found" });
+    }
+
+    // Get all active teachers who are not already assigned to this subject
+    const availableTeachers = await Teacher.find({
+      isActive: true,
+      "assignedSubjects.subjectId": { $ne: subjectId }
+    })
+      .populate("userId", "fullName email")
+      .select("teacherId userId department specialization")
+      .sort({ "userId.fullName": 1 });
+
+    res.status(200).json({
+      message: "Available teachers fetched successfully",
+      teachers: availableTeachers
     });
   } catch (error: any) {
     res.status(500).json({ message: error.message });

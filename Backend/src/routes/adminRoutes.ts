@@ -1,4 +1,4 @@
-// Updated Admin Routes with Module Leader Management
+// Updated Admin Routes with Complete Subject-Teacher Management
 import express from "express";
 import { protect, adminOnly } from "../middleware/authMiddleware";
 
@@ -19,7 +19,10 @@ import {
   assignModuleLeader,
   removeModuleLeader,
   getSubjectStatistics,
-  getModuleLeaderSubjects
+  getModuleLeaderSubjects,
+  getAvailableTeachersForSubject,
+  assignSubjectToTeacher,        // 🔥 MOVED HERE
+  removeSubjectFromTeacher       // 🔥 MOVED HERE
 } from "../controllers/Admin/subjectController";
 
 // Group Management
@@ -91,9 +94,7 @@ import {
   getTeacherDetails,
   updateTeacherDetails,
   getUnassignedTeachers,
-  assignSubjectToTeacher,
-  removeSubjectFromTeacher,
-  assignGroupsToTeacherSubject,
+  assignGroupsToTeacherSubject,  // 🔥 KEEP ONLY THIS ONE
   getTeacherWorkload
 } from "../controllers/Admin/Teachercontroller";
 
@@ -143,10 +144,17 @@ adminRouter.get("/subjects/semester/:semester", protect, adminOnly, getSubjectsB
 adminRouter.put("/subjects/:id", protect, adminOnly, updateSubject);
 adminRouter.delete("/subjects/:id", protect, adminOnly, deleteSubject);
 
-// Module Leader Management (NEW)
+// Module Leader Management
 adminRouter.patch("/subjects/:subjectId/module-leader", protect, adminOnly, assignModuleLeader);
 adminRouter.delete("/subjects/:subjectId/module-leader", protect, adminOnly, removeModuleLeader);
 adminRouter.get("/subjects/module-leader/:teacherId", protect, adminOnly, getModuleLeaderSubjects);
+
+// 🔥 NEW: Get available teachers for subject assignment
+adminRouter.get("/subjects/:subjectId/available-teachers", protect, adminOnly, getAvailableTeachersForSubject);
+
+// Teacher-Subject Assignment (MOVED TO SUBJECT MANAGEMENT SECTION)
+adminRouter.post("/teachers/:teacherId/subjects", protect, adminOnly, assignSubjectToTeacher);
+adminRouter.delete("/teachers/:teacherId/subjects/:subjectId", protect, adminOnly, removeSubjectFromTeacher);
 
 /* ============================================================
  👨‍👩‍👧‍👦 GROUP MANAGEMENT
@@ -220,9 +228,7 @@ adminRouter.get("/teachers/:teacherId", protect, adminOnly, getTeacherDetails);
 adminRouter.put("/teachers/:teacherId", protect, adminOnly, updateTeacherDetails);
 adminRouter.get("/teachers/:teacherId/workload", protect, adminOnly, getTeacherWorkload);
 
-// Teacher-Subject Assignment
-adminRouter.post("/teachers/:teacherId/subjects", protect, adminOnly, assignSubjectToTeacher);
-adminRouter.delete("/teachers/:teacherId/subjects/:subjectId", protect, adminOnly, removeSubjectFromTeacher);
+// Group assignment for specific teacher-subject (KEPT IN TEACHER SECTION)
 adminRouter.patch("/teachers/:teacherId/subjects/:subjectId/groups", protect, adminOnly, assignGroupsToTeacherSubject);
 
 /* ============================================================

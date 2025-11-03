@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import {
   BookOpen,
   Search,
@@ -184,40 +184,16 @@ export default function AdminCourses() {
     onError: (err) => toast.error(err || "Failed to remove module leader")
   });
 
-  // Get data from API - memoized to prevent unnecessary re-renders
-  const subjects = useMemo(() => 
-    Array.isArray(subjectsData) ? subjectsData : subjectsData?.subjects || [], 
-    [subjectsData]
-  );
+  // Get data from API
+  const subjects = Array.isArray(subjectsData) ? subjectsData : subjectsData?.subjects || [];
+  const teachers = Array.isArray(teachersData) ? teachersData : teachersData?.teachers || [];
+  const groups = Array.isArray(groupsData) ? groupsData : groupsData?.data || [];
 
-  const teachers = useMemo(() => 
-    Array.isArray(teachersData) ? teachersData : teachersData?.teachers || [], 
-    [teachersData]
-  );
+  // Calculate stats
+  const subjectsWithModuleLeader = subjects.filter(s => s.hasModuleLeader || s.moduleLeader).length;
 
-  const groups = useMemo(() => 
-    Array.isArray(groupsData) ? groupsData : groupsData?.data || [], 
-    [groupsData]
-  );
-
-  // Calculate stats - memoized to prevent recalculations
-  const subjectsWithModuleLeader = useMemo(() => 
-    subjects.filter(s => s.hasModuleLeader || s.moduleLeader).length, 
-    [subjects]
-  );
-
-  const totalTeachersAssigned = useMemo(() => 
-    subjects.reduce((sum, s) => sum + (s.teachersCount || 0), 0), 
-    [subjects]
-  );
-
-  const totalStudents = useMemo(() => 
-    subjects.reduce((sum, s) => sum + (s.studentsCount || 0), 0), 
-    [subjects]
-  );
-
-  // Form fields - memoized to prevent recreation on every render
-  const subjectAddFields = useMemo(() => [
+  // Form fields
+  const subjectAddFields = [
     {
       name: "code",
       label: "Subject Code",
@@ -275,9 +251,9 @@ export default function AdminCourses() {
         }))
       ]
     }
-  ], [teachers]);
+  ];
 
-  const subjectEditFields = useMemo(() => [
+  const subjectEditFields = [
     {
       name: "name",
       label: "Subject Name",
@@ -296,7 +272,7 @@ export default function AdminCourses() {
       type: "textarea" as const,
       required: false
     }
-  ], []);
+  ];
 
   // Filter subjects
   useEffect(() => {
@@ -351,21 +327,19 @@ export default function AdminCourses() {
   const handleDeleteSubject = async (subject: Subject) => {
     await deleteSubjectApi(`/admin/subjects/${subject._id}`);
   };
+const handleAssignTeacher = async (e: { preventDefault: () => void }) => {
+  e.preventDefault();
+  if (!selectedSubject || !selectedTeacherForAssign) return;
 
-  const handleAssignTeacher = async (e: { preventDefault: () => void }) => {
-    e.preventDefault();
-    if (!selectedSubject || !selectedTeacherForAssign) return;
-
-    await assignTeacherApi(
-      `/admin/teachers/${selectedTeacherForAssign}/subjects`,
-      {
-        subjectId: selectedSubject._id,
-        semester: selectedSubject.semester, 
-        groups: selectedGroupsForAssign
-      }
-    );
-  };
-
+  await assignTeacherApi(
+    `/admin/teachers/${selectedTeacherForAssign}/subjects`,
+    {
+      subjectId: selectedSubject._id,
+      groups: selectedGroupsForAssign
+      
+    }
+  );
+};
   const handleAssignModuleLeader = async (e: { preventDefault: () => void }) => {
     e.preventDefault();
     if (!selectedSubject || !selectedModuleLeader) return;
@@ -487,7 +461,7 @@ export default function AdminCourses() {
 
             <StatsCard
               title="Teachers Assigned"
-              count={totalTeachersAssigned}
+              count={subjects.reduce((sum, s) => sum + (s.teachersCount || 0), 0)}
               subtitle="total assignments"
               icon={Users}
               iconColor="text-green-600"
@@ -496,7 +470,7 @@ export default function AdminCourses() {
 
             <StatsCard
               title="Total Students"
-              count={totalStudents}
+              count={subjects.reduce((sum, s) => sum + (s.studentsCount || 0), 0)}
               subtitle="enrolled"
               icon={Clock}
               iconColor="text-purple-600"

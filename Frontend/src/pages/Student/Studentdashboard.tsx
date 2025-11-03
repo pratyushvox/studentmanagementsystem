@@ -244,42 +244,7 @@ export default function StudentDashboardPage() {
           </div>
         </div>
 
-        {/* Performance Summary */}
-        <div className="bg-white border border-gray-200 rounded-lg">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-900">Performance Summary</h2>
-          </div>
-          <div className="p-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              <div className="text-center border border-gray-200 rounded-lg p-4">
-                <div className="text-3xl font-bold text-gray-900">
-                  {dashboard.performance?.totalSubmissions || 0}
-                </div>
-                <p className="text-sm text-gray-600 mt-2">Total Submissions</p>
-              </div>
-              <div className="text-center border border-gray-200 rounded-lg p-4">
-                <div className="text-3xl font-bold text-green-600">
-                  {dashboard.performance?.gradedSubmissions || 0}
-                </div>
-                <p className="text-sm text-gray-600 mt-2">Graded</p>
-              </div>
-              <div className="text-center border border-gray-200 rounded-lg p-4">
-                <div className="text-3xl font-bold text-orange-600">
-                  {dashboard.performance?.ungradedSubmissions || 0}
-                </div>
-                <p className="text-sm text-gray-600 mt-2">Pending Grades</p>
-              </div>
-              <div className="text-center border border-gray-200 rounded-lg p-4">
-                <div className="text-3xl font-bold text-teal-600">
-                  {dashboard.performance?.averageGrade > 0
-                    ? `${dashboard.performance?.averageGrade}%`
-                    : "N/A"}
-                </div>
-                <p className="text-sm text-gray-600 mt-2">Average Grade</p>
-              </div>
-            </div>
-          </div>
-        </div>
+       
       </main>
     </div>
   );
