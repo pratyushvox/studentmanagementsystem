@@ -89,6 +89,28 @@ interface AttendanceData {
   attendanceRecords: AttendanceRecord[];
 }
 
+interface ExistingAttendance {
+  _id: string;
+  date: string;
+  attendanceRecords: Array<{
+    studentId: {
+      _id: string;
+      studentId: string;
+      userId: {
+        fullName: string;
+      };
+    };
+    status: 'present' | 'absent' | 'late' | 'excused';
+    remarks?: string;
+  }>;
+  totalPresent: number;
+  totalAbsent: number;
+  totalLate: number;
+  totalStudents: number;
+  isSubmitted: boolean;
+  submittedAt?: string;
+}
+
 const TeacherAttendancePage = () => {
   const [activeItem, setActiveItem] = useState('attendance');
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -109,7 +131,7 @@ const TeacherAttendancePage = () => {
     refetch: refetchDashboard 
   } = useApiGet('/teacher/dashboard', { autoFetch: true });
 
-  // ✅ FIXED: Fetch students using the correct teacher route
+  // Fetch students using the correct teacher route
   const { 
     data: studentsResponse, 
     loading: studentsLoading,
@@ -117,7 +139,19 @@ const TeacherAttendancePage = () => {
     refetch: refetchStudents 
   } = useApiGet(
     selectedGroup && selectedSubject 
-      ? `/teacher/groups/${selectedGroup}/students?subjectId=${selectedSubject}` // ✅ CORRECT ROUTE
+      ? `/teacher/groups/${selectedGroup}/students?subjectId=${selectedSubject}`
+      : null,
+    { autoFetch: false }
+  );
+
+  // Fetch existing attendance for the selected date
+  const { 
+    data: existingAttendanceResponse, 
+    loading: existingAttendanceLoading,
+    refetch: refetchExistingAttendance 
+  } = useApiGet(
+    selectedGroup && selectedSubject && selectedDate 
+      ? `/teacher/attendance/date?groupId=${selectedGroup}&subjectId=${selectedSubject}&date=${selectedDate}`
       : null,
     { autoFetch: false }
   );
@@ -139,6 +173,7 @@ const TeacherAttendancePage = () => {
     onSuccess: () => {
       toast.success('Attendance marked successfully!');
       refetchHistory();
+      refetchExistingAttendance(); // Refresh existing attendance after marking
     },
     onError: (error) => {
       toast.error(error || 'Failed to mark attendance');
@@ -147,8 +182,9 @@ const TeacherAttendancePage = () => {
 
   const dashboard: TeacherDashboard = dashboardResponse?.dashboard;
   const attendanceHistory = historyResponse?.attendanceHistory || [];
+  const existingAttendance: ExistingAttendance = existingAttendanceResponse?.attendance;
   
-  // ✅ FIXED: Extract students from the correct response structure
+  // Extract students from the correct response structure
   const students: Student[] = studentsResponse?.students || [];
 
   // Extract assigned subjects and groups from dashboard
@@ -177,27 +213,47 @@ const TeacherAttendancePage = () => {
         }))
     : [];
 
-  // Initialize attendance records when group, subject, or date changes
+  // Fetch students and existing attendance when group, subject, or date changes
   useEffect(() => {
     if (selectedGroup && selectedSubject && selectedDate) {
       refetchStudents();
+      refetchExistingAttendance();
     }
   }, [selectedGroup, selectedSubject, selectedDate]);
 
-  // Initialize attendance records when students data is loaded
+  // Initialize attendance records when students data is loaded OR when existing attendance is found
   useEffect(() => {
     if (students.length > 0 && selectedGroup && selectedSubject && selectedDate) {
-      const initialRecords: Record<string, AttendanceRecord> = {};
-      students.forEach(student => {
-        initialRecords[student._id] = {
-          studentId: student._id,
-          status: 'present',
-          remarks: ''
-        };
-      });
-      setAttendanceRecords(initialRecords);
+      // If we have existing attendance data for this date, use it
+      if (existingAttendance) {
+        console.log('📅 Found existing attendance records:', existingAttendance);
+        
+        const existingRecords: Record<string, AttendanceRecord> = {};
+        
+        existingAttendance.attendanceRecords.forEach((record) => {
+          existingRecords[record.studentId._id] = {
+            studentId: record.studentId._id,
+            status: record.status,
+            remarks: record.remarks || ''
+          };
+        });
+        
+        setAttendanceRecords(existingRecords);
+      } else {
+        // Otherwise, initialize with default 'present' status
+        console.log('🆕 No existing attendance found, initializing with default "present"');
+        const initialRecords: Record<string, AttendanceRecord> = {};
+        students.forEach(student => {
+          initialRecords[student._id] = {
+            studentId: student._id,
+            status: 'present',
+            remarks: ''
+          };
+        });
+        setAttendanceRecords(initialRecords);
+      }
     }
-  }, [students, selectedGroup, selectedSubject, selectedDate]);
+  }, [students, selectedGroup, selectedSubject, selectedDate, existingAttendance]);
 
   // Load history when filters change
   useEffect(() => {
@@ -270,36 +326,24 @@ const TeacherAttendancePage = () => {
   const selectedSubjectData = subjectsForSelectedGroup.find(s => s.subjectId._id === selectedSubject);
   const statusCounts = getStatusCounts();
 
-  // Debug logging - Enhanced
+  // Debug logging
   useEffect(() => {
     console.log('=== DEBUGGING ATTENDANCE ===');
     console.log('Selected Group:', selectedGroup);
-    console.log('Selected Group Data:', selectedGroupData);
     console.log('Selected Subject:', selectedSubject);
-    console.log('Selected Subject Data:', selectedSubjectData);
-    console.log('All Assigned Subjects:', assignedSubjects);
-    console.log('Subjects for Selected Group:', subjectsForSelectedGroup);
+    console.log('Selected Date:', selectedDate);
     console.log('Students loaded:', students.length);
-    console.log('Students Response:', studentsResponse);
-    console.log('Students Error:', studentsError);
-    console.log('API URL:', selectedGroup && selectedSubject ? `/teacher/groups/${selectedGroup}/students?subjectId=${selectedSubject}` : 'N/A');
-    
-    // ✅ ADDED: Debug student data
-    if (students.length > 0) {
-      console.log('Student Details:', students.map(s => ({
-        id: s._id,
-        name: s.fullName,
-        studentId: s.studentId
-      })));
-    }
-  }, [selectedGroup, selectedSubject, students, studentsResponse, studentsError, selectedGroupData, selectedSubjectData, assignedSubjects, subjectsForSelectedGroup]);
+    console.log('Existing Attendance:', existingAttendance);
+    console.log('Attendance Records:', attendanceRecords);
+    console.log('Existing Attendance Loading:', existingAttendanceLoading);
+  }, [selectedGroup, selectedSubject, selectedDate, students, existingAttendance, attendanceRecords, existingAttendanceLoading]);
 
   if (dashboardLoading) {
     return (
       <>
         <Navbar />
         <Sidebar userRole="teacher" activeItem="attendance" />
-        <div className="ml-64 mt-16 min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+        <div>
           <LoadingSpinner message="Loading attendance setup..." />
         </div>
       </>
@@ -392,6 +436,11 @@ const TeacherAttendancePage = () => {
             <div className="flex items-center gap-2 mb-4">
               <Calendar size={20} className="text-gray-600" />
               <h2 className="text-lg font-semibold text-gray-800">Mark Attendance</h2>
+              {existingAttendance && (
+                <span className="px-2 py-1 text-xs font-medium bg-yellow-100 text-yellow-800 rounded-full">
+                  Editing Existing Record
+                </span>
+              )}
             </div>
 
             {/* Filters */}
@@ -455,7 +504,7 @@ const TeacherAttendancePage = () => {
               <div className="flex items-end">
                 <button
                   onClick={handleSubmitAttendance}
-                  disabled={markingAttendance || !selectedGroup || !selectedSubject || studentsLoading}
+                  disabled={markingAttendance || !selectedGroup || !selectedSubject || studentsLoading || existingAttendanceLoading}
                   className="w-full px-6 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {markingAttendance ? (
@@ -463,7 +512,7 @@ const TeacherAttendancePage = () => {
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                       Saving...
                     </>
-                  ) : studentsLoading ? (
+                  ) : studentsLoading || existingAttendanceLoading ? (
                     <>
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                       Loading...
@@ -471,14 +520,26 @@ const TeacherAttendancePage = () => {
                   ) : (
                     <>
                       <CheckCircle size={20} />
-                      Mark Attendance
+                      {existingAttendance ? 'Update Attendance' : 'Mark Attendance'}
                     </>
                   )}
                 </button>
               </div>
             </div>
 
-            
+            {/* Loading State for Existing Attendance */}
+            {existingAttendanceLoading && (
+              <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <div className="flex items-center gap-3">
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+                  <div>
+                    <h3 className="font-semibold text-blue-800">Loading existing attendance...</h3>
+                    <p className="text-sm text-blue-700 mt-1">Fetching attendance records for {selectedDate}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Error Display */}
             {studentsError && selectedGroup && selectedSubject && (
               <div className="mb-4 p-4 bg-red-50 rounded-lg border border-red-200">
@@ -505,11 +566,12 @@ const TeacherAttendancePage = () => {
                 attendanceRecords={attendanceRecords}
                 onStatusChange={handleStatusChange}
                 onRemarksChange={handleRemarksChange}
-                loading={studentsLoading}
+                loading={studentsLoading || existingAttendanceLoading}
                 groupName={selectedGroupData?.name}
                 subjectName={selectedSubjectData?.subjectId.name}
                 selectedDate={selectedDate}
                 readOnly={false}
+                existingAttendance={!!existingAttendance}
               />
             )}
 
