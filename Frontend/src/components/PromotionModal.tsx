@@ -7,7 +7,10 @@ import {
   CheckCircle, 
   XCircle,
   AlertCircle,
-  BarChart3
+  BarChart3,
+  Filter,
+  Search,
+  Users
 } from "lucide-react";
 import { LoadingSpinner } from "./Loadingerror";
 import { useApiGet, useApiPost } from "../hooks/useApi";
@@ -21,6 +24,17 @@ interface PromotionModalProps {
   onPromoteSemester: (semester: string) => Promise<void>;
 }
 
+interface AssignmentResult {
+  submissionId: string;
+  assignmentTitle: string;
+  subjectName: string;
+  subjectCode: string;
+  obtainedMarks: number;
+  maxMarks: number;
+  percentage: number;
+  passed: boolean;
+}
+
 interface StudentReport {
   studentId: string;
   studentCode: string;
@@ -31,7 +45,12 @@ interface StudentReport {
   mainAssignmentsCompleted: boolean;
   promotionEligibility: string;
   reason: string;
-  assignmentResults?: any[];
+  totalSubmissions: number;
+  mainSubmissionsCount: number;
+  groupName?: string;
+  groupId?: string;
+  mainAssignmentResults?: AssignmentResult[];
+  subjectResults?: any[];
 }
 
 interface PromotionReport {
@@ -43,6 +62,12 @@ interface PromotionReport {
   report: StudentReport[];
 }
 
+interface Group {
+  id: string;
+  name: string;
+  semester: number;
+}
+
 export default function PromotionModal({
   isOpen,
   onClose,
@@ -50,8 +75,11 @@ export default function PromotionModal({
   onSemesterChange,
   onPromoteSemester
 }: PromotionModalProps) {
-  const [manualPromotionReason, setManualPromotionReason] = useState("");
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
+  const [expandedStudent, setExpandedStudent] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedGroup, setSelectedGroup] = useState<string>("all");
+  const [selectedStatus, setSelectedStatus] = useState<string>("all");
 
   const { 
     data: promotionReportData, 
@@ -61,11 +89,15 @@ export default function PromotionModal({
     autoFetch: false
   });
 
+  const { 
+    data: groupsData,
+    loading: groupsLoading 
+  } = useApiGet(`/admin/groups/semester/${selectedSemester}`);
+
   const { post: manuallyPromoteApi, loading: manualPromoteLoading } = useApiPost({
     onSuccess: (data) => {
       toast.success(`Manually promoted ${data.promoted} students!`);
       setSelectedStudents([]);
-      setManualPromotionReason("");
       fetchPromotionReport();
     },
     onError: (err) => toast.error(err || "Failed to manually promote students")
@@ -78,6 +110,20 @@ export default function PromotionModal({
   }, [isOpen, selectedSemester]);
 
   const promotionReport: PromotionReport | null = promotionReportData || null;
+  const groups: Group[] = groupsData || [];
+
+  // Filter students based on search term, group, and status
+  const filteredStudents = promotionReport?.report?.filter((student: StudentReport) => {
+    const matchesSearch = 
+      student.studentCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      student.fullName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      student.groupName?.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesGroup = selectedGroup === "all" || student.groupId === selectedGroup;
+    const matchesStatus = selectedStatus === "all" || student.promotionEligibility === selectedStatus;
+    
+    return matchesSearch && matchesGroup && matchesStatus;
+  }) || [];
 
   const handleManualPromotion = async () => {
     if (selectedStudents.length === 0) {
@@ -85,15 +131,10 @@ export default function PromotionModal({
       return;
     }
 
-    if (!manualPromotionReason.trim()) {
-      toast.error("Please provide a reason for manual promotion");
-      return;
-    }
-
     await manuallyPromoteApi("/admin/manual-promote", {
       studentIds: selectedStudents,
       semester: parseInt(selectedSemester),
-      reason: manualPromotionReason.trim()
+      reason: "Manual promotion approved by admin" // Default reason
     });
   };
 
@@ -106,15 +147,52 @@ export default function PromotionModal({
   };
 
   const handleSelectAllManual = () => {
-    const manualStudents = promotionReport?.report
-      ?.filter((student: StudentReport) => student.promotionEligibility === 'manual_promote')
-      .map((student: StudentReport) => student.studentId) || [];
+    const manualStudents = filteredStudents
+      .filter((student: StudentReport) => student.promotionEligibility === 'manual_promote')
+      .map((student: StudentReport) => student.studentId);
     
     setSelectedStudents(manualStudents);
   };
 
   const handleDeselectAll = () => {
     setSelectedStudents([]);
+  };
+
+  const toggleStudentExpansion = (studentId: string) => {
+    setExpandedStudent(expandedStudent === studentId ? null : studentId);
+  };
+
+  const getStatusIcon = (eligibility: string) => {
+    switch (eligibility) {
+      case 'auto_promote':
+        return <CheckCircle className="w-4 h-4 text-green-500" />;
+      case 'manual_promote':
+        return <AlertCircle className="w-4 h-4 text-yellow-500" />;
+      default:
+        return <XCircle className="w-4 h-4 text-red-500" />;
+    }
+  };
+
+  const getStatusColor = (eligibility: string) => {
+    switch (eligibility) {
+      case 'auto_promote':
+        return 'text-green-700 bg-green-100';
+      case 'manual_promote':
+        return 'text-yellow-700 bg-yellow-100';
+      default:
+        return 'text-red-700 bg-red-100';
+    }
+  };
+
+  const getStatusText = (eligibility: string) => {
+    switch (eligibility) {
+      case 'auto_promote':
+        return 'Auto Promote';
+      case 'manual_promote':
+        return 'Manual Review';
+      default:
+        return 'Not Eligible';
+    }
   };
 
   if (!isOpen) return null;
@@ -204,6 +282,60 @@ export default function PromotionModal({
           </div>
         )}
 
+        {/* Filters Section */}
+        <div className="p-4 border-b border-gray-200 bg-gray-50">
+          <div className="flex flex-col md:flex-row gap-4 items-start md:items-center">
+            {/* Search */}
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <input
+                type="text"
+                placeholder="Search by student code, name, or group..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+
+            {/* Group Filter */}
+            <div className="flex gap-2 items-center">
+              <Users className="w-4 h-4 text-gray-500" />
+              <select
+                value={selectedGroup}
+                onChange={(e) => setSelectedGroup(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+              >
+                <option value="all">All Groups</option>
+                {groups.map((group) => (
+                  <option key={group.id} value={group.id}>
+                    {group.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Status Filter */}
+            <div className="flex gap-2 items-center">
+              <Filter className="w-4 h-4 text-gray-500" />
+              <select
+                value={selectedStatus}
+                onChange={(e) => setSelectedStatus(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+              >
+                <option value="all">All Status</option>
+                <option value="auto_promote">Auto Promote</option>
+                <option value="manual_promote">Manual Review</option>
+                <option value="failed">Not Eligible</option>
+              </select>
+            </div>
+
+            {/* Results Count */}
+            <div className="text-sm text-gray-600 bg-white px-3 py-2 rounded border">
+              Showing {filteredStudents.length} of {promotionReport?.totalStudents || 0} students
+            </div>
+          </div>
+        </div>
+
         {/* Content */}
         <div className="flex-1 overflow-y-auto">
           {promotionReportLoading ? (
@@ -239,8 +371,8 @@ export default function PromotionModal({
                   </div>
 
                   <div className="space-y-3 mb-4">
-                    {promotionReport.report
-                      ?.filter((student: StudentReport) => student.promotionEligibility === 'manual_promote')
+                    {filteredStudents
+                      .filter((student: StudentReport) => student.promotionEligibility === 'manual_promote')
                       .map((student: StudentReport) => (
                         <div key={student.studentId} className="flex items-center justify-between p-3 bg-white rounded border">
                           <div className="flex items-center gap-3">
@@ -251,10 +383,18 @@ export default function PromotionModal({
                               className="w-4 h-4 text-yellow-600 rounded focus:ring-yellow-500"
                             />
                             <div>
-                              <div className="font-semibold">{student.studentCode} - {student.fullName}</div>
+                              <div className="font-semibold">
+                                {student.studentCode} - {student.fullName}
+                                {student.groupName && (
+                                  <span className="ml-2 text-sm text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                                    {student.groupName}
+                                  </span>
+                                )}
+                              </div>
                               <div className="text-sm text-gray-600">
-                                Attendance: {student.attendancePercentage}% | 
-                                Assignments: {student.mainAssignmentsPassed ? 'Passed' : 'Failed'}
+                                Attendance: {student.attendancePercentage.toFixed(1)}% | 
+                                Assignments: {student.mainAssignmentsPassed ? 'Passed' : 'Failed'} |
+                                Submissions: {student.mainSubmissionsCount || 0}
                               </div>
                               {student.reason && (
                                 <div className="text-sm text-yellow-600">{student.reason}</div>
@@ -268,22 +408,14 @@ export default function PromotionModal({
                       ))}
                   </div>
 
-                  <div className="space-y-3">
-                    <textarea
-                      value={manualPromotionReason}
-                      onChange={(e) => setManualPromotionReason(e.target.value)}
-                      placeholder="Enter reason for manual promotion (required)..."
-                      className="w-full px-3 py-2 border border-yellow-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
-                      rows={3}
-                    />
-                    <button
-                      onClick={handleManualPromotion}
-                      disabled={selectedStudents.length === 0 || !manualPromotionReason.trim() || manualPromoteLoading}
-                      className="px-6 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {manualPromoteLoading ? "Promoting..." : `Promote Selected (${selectedStudents.length})`}
-                    </button>
-                  </div>
+                  {/* REMOVED: Textarea for manual promotion reason */}
+                  <button
+                    onClick={handleManualPromotion}
+                    disabled={selectedStudents.length === 0 || manualPromoteLoading}
+                    className="w-full px-6 py-3 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {manualPromoteLoading ? "Promoting..." : `Promote Selected Students (${selectedStudents.length})`}
+                  </button>
                 </div>
               )}
 
@@ -291,7 +423,7 @@ export default function PromotionModal({
               <div>
                 <h3 className="text-lg font-semibold mb-4">All Students Report</h3>
                 <div className="space-y-3">
-                  {promotionReport.report?.map((student: StudentReport) => (
+                  {filteredStudents.map((student: StudentReport) => (
                     <div key={student.studentId} className={`border rounded-lg p-4 ${
                       student.promotionEligibility === 'auto_promote' ? 'border-green-200 bg-green-50' :
                       student.promotionEligibility === 'manual_promote' ? 'border-yellow-200 bg-yellow-50' :
@@ -299,13 +431,25 @@ export default function PromotionModal({
                     }`}>
                       <div className="flex items-center justify-between">
                         <div className="flex-1">
-                          <div className="font-semibold text-gray-900">
-                            {student.studentCode} - {student.fullName}
+                          <div className="flex items-center gap-2 mb-2">
+                            {getStatusIcon(student.promotionEligibility)}
+                            <div className="font-semibold text-gray-900">
+                              {student.studentCode} - {student.fullName}
+                            </div>
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(student.promotionEligibility)}`}>
+                              {getStatusText(student.promotionEligibility)}
+                            </span>
+                            {student.groupName && (
+                              <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
+                                {student.groupName}
+                              </span>
+                            )}
                           </div>
-                          <div className="text-sm text-gray-600 mt-1">
-                            <span className="inline-flex items-center gap-1 mr-4">
+                          
+                          <div className="text-sm text-gray-600 mt-2 grid grid-cols-1 md:grid-cols-3 gap-2">
+                            <span className="inline-flex items-center gap-1">
                               <Clock className="w-3 h-3" />
-                              Attendance: {student.attendancePercentage}%
+                              Attendance: <strong>{student.attendancePercentage.toFixed(1)}%</strong>
                             </span>
                             <span className="inline-flex items-center gap-1">
                               {student.mainAssignmentsPassed ? (
@@ -313,20 +457,54 @@ export default function PromotionModal({
                               ) : (
                                 <XCircle className="w-3 h-3 text-red-500" />
                               )}
-                              Assignments: {student.mainAssignmentsPassed ? 'Passed' : student.mainAssignmentsCompleted ? 'Failed' : 'Not Completed'}
+                              Main Assignments: <strong>{student.mainAssignmentsPassed ? 'Passed' : student.mainAssignmentsCompleted ? 'Failed' : 'Not Completed'}</strong>
+                            </span>
+                            <span className="inline-flex items-center gap-1">
+                              <BarChart3 className="w-3 h-3" />
+                              Submissions: <strong>{student.mainSubmissionsCount || 0}</strong>
                             </span>
                           </div>
+
                           {student.reason && (
                             <div className="text-sm text-gray-500 mt-2">{student.reason}</div>
                           )}
-                        </div>
-                        <div className={`px-3 py-1 rounded-full text-xs font-medium ${
-                          student.promotionEligibility === 'auto_promote' ? 'bg-green-100 text-green-700' :
-                          student.promotionEligibility === 'manual_promote' ? 'bg-yellow-100 text-yellow-700' :
-                          'bg-red-100 text-red-700'
-                        }`}>
-                          {student.promotionEligibility === 'auto_promote' ? 'Auto Promote' :
-                           student.promotionEligibility === 'manual_promote' ? 'Manual Review' : 'Not Eligible'}
+
+                          {/* Assignment Details */}
+                          {student.mainAssignmentResults && student.mainAssignmentResults.length > 0 && (
+                            <div className="mt-3">
+                              <button
+                                onClick={() => toggleStudentExpansion(student.studentId)}
+                                className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                              >
+                                {expandedStudent === student.studentId ? 'Hide' : 'Show'} Assignment Details
+                              </button>
+                              
+                              {expandedStudent === student.studentId && (
+                                <div className="mt-3 p-3 bg-white border rounded-lg">
+                                  <h4 className="font-semibold text-sm mb-2">Main Assignment Results:</h4>
+                                  <div className="space-y-2">
+                                    {student.mainAssignmentResults.map((assignment: AssignmentResult, index: number) => (
+                                      <div key={assignment.submissionId} className="flex justify-between items-center text-sm p-2 bg-gray-50 rounded">
+                                        <div>
+                                          <div className="font-medium">{assignment.assignmentTitle}</div>
+                                          <div className="text-gray-600 text-xs">{assignment.subjectName} ({assignment.subjectCode})</div>
+                                        </div>
+                                        <div className="text-right">
+                                          <div className={`font-bold ${assignment.passed ? 'text-green-600' : 'text-red-600'}`}>
+                                            {assignment.obtainedMarks}/{assignment.maxMarks} 
+                                            <span className="ml-1">({assignment.percentage.toFixed(1)}%)</span>
+                                          </div>
+                                          <div className={`text-xs ${assignment.passed ? 'text-green-600' : 'text-red-600'}`}>
+                                            {assignment.passed ? 'PASS' : 'FAIL'}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>

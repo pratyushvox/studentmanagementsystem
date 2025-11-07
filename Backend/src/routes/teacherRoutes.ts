@@ -2,6 +2,7 @@ import express from "express";
 import { protect, teacherOnly } from "../middleware/authMiddleware";
 import { upload } from "../middleware/uploadMiddleware";
 
+
 // Dashboard
 import { getTeacherDashboard } from "../controllers/Teacher/dashboardController";
 
@@ -26,7 +27,7 @@ import {
 import {
   getSubmissionsForGrading,
   gradeSubmission
-} from "../controllers/Teacher/assignmentController";
+} from "../controllers/Teacher/submissionController";
 
 // Post Management (Course Materials)
 import {
@@ -67,6 +68,10 @@ import {
 } from "../controllers/Teacher/Teachergroupcontroller.js";
 
 const router = express.Router();
+
+
+
+
 
 /* ============================================================
  📊 DASHBOARD

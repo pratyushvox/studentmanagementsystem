@@ -150,19 +150,37 @@ export default function TeacherAssignments() {
   const teacher = useMemo(() => teacherData?.dashboard?.teacher || teacherData?.teacher, [teacherData]);
   const isModuleLeader = useMemo(() => teacher?.isModuleLeader || false, [teacher]);
   const assignedSubjects = useMemo(() => teacher?.assignedSubjects || [], [teacher]);
+  const moduleLeaderSubjects = useMemo(() => teacher?.moduleLeaderSubjects || [], [teacher]);
 
   // Get unique subjects and groups - memoized to prevent recreation
-  const subjects: Subject[] = useMemo(() => 
-    assignedSubjects
+  const subjects: Subject[] = useMemo(() => {
+    const assignedSubjectsList = assignedSubjects
       .filter((as: any) => as.subjectId && as.subjectId._id)
       .map((as: any) => ({
         _id: as.subjectId._id,
         name: as.subjectId.name,
         code: as.subjectId.code,
         semester: as.semester
-      })),
-    [assignedSubjects]
-  );
+      }));
+
+    // Add module leader subjects if the teacher is a module leader
+    const moduleLeaderSubjectsList = moduleLeaderSubjects
+      .filter((mls: any) => mls && mls._id)
+      .map((mls: any) => ({
+        _id: mls._id,
+        name: mls.name,
+        code: mls.code,
+        semester: 1 // Default semester for module leader subjects
+      }));
+
+    // Combine and remove duplicates
+    const allSubjects = [...assignedSubjectsList, ...moduleLeaderSubjectsList];
+    const uniqueSubjects = allSubjects.filter((subject, index, self) => 
+      index === self.findIndex(s => s._id === subject._id)
+    );
+
+    return uniqueSubjects;
+  }, [assignedSubjects, moduleLeaderSubjects]);
 
   const allGroups: Group[] = useMemo(() =>
     assignedSubjects
@@ -319,6 +337,24 @@ export default function TeacherAssignments() {
   };
 
   const getSubjectGroups = (subjectId: string) => {
+    // Check if this is a module leader subject
+    const isModuleLeaderSubject = moduleLeaderSubjects?.some(
+      (mls: any) => mls._id === subjectId
+    );
+
+    if (isModuleLeaderSubject) {
+      // For module leader subjects, return all groups from the same semester
+      const moduleLeaderSubject = moduleLeaderSubjects.find(
+        (mls: any) => mls._id === subjectId
+      );
+      
+      // Get all groups from the same semester as the module leader subject
+      return allGroups.filter(group => 
+        group.semester === 1 // Adjust this based on your module leader subject semester
+      );
+    }
+
+    // For regular assigned subjects, use the existing logic
     const subject = assignedSubjects.find((as: any) => as.subjectId._id === subjectId);
     return subject?.groups || [];
   };
@@ -461,6 +497,7 @@ export default function TeacherAssignments() {
           getSubjectGroups={getSubjectGroups}
           isModuleLeader={isModuleLeader}
           loading={creating}
+          moduleLeaderSubjects={moduleLeaderSubjects}
         />
       )}
 
@@ -492,6 +529,7 @@ export default function TeacherAssignments() {
     </div>
   );
 }
+
 // Create Assignment Modal Component
 interface CreateAssignmentModalProps {
   isOpen: boolean;
@@ -505,6 +543,7 @@ interface CreateAssignmentModalProps {
   getSubjectGroups: (subjectId: string) => any[];
   isModuleLeader: boolean;
   loading: boolean;
+  moduleLeaderSubjects: any[];
 }
 
 function CreateAssignmentModal({
@@ -518,7 +557,8 @@ function CreateAssignmentModal({
   subjects,
   getSubjectGroups,
   isModuleLeader,
-  loading
+  loading,
+  moduleLeaderSubjects
 }: CreateAssignmentModalProps) {
   if (!isOpen) return null;
 
@@ -531,6 +571,10 @@ function CreateAssignmentModal({
         ? formData.groups.filter((id: string) => id !== groupId)
         : [...formData.groups, groupId]
     });
+  };
+
+  const isModuleLeaderSubject = (subjectId: string) => {
+    return moduleLeaderSubjects.some((mls: any) => mls._id === subjectId);
   };
 
   return (
@@ -562,7 +606,13 @@ function CreateAssignmentModal({
             name="subjectId"
             value={formData.subjectId}
             onChange={(e) => setFormData({ ...formData, subjectId: e.target.value, groups: [] })}
-            options={subjects.map(s => ({ value: s._id, label: `${s.name} (${s.code})` }))}
+            options={subjects.map(s => {
+              const isMLSubject = isModuleLeaderSubject(s._id);
+              return { 
+                value: s._id, 
+                label: `${s.name} (${s.code})${isMLSubject ? ' 👑' : ''}` 
+              };
+            })}
             placeholder="Select subject..."
             required
           />
@@ -571,7 +621,7 @@ function CreateAssignmentModal({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Assignment Type <span className="text-red-500">*</span>
             </label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className={`grid ${isModuleLeader ? 'grid-cols-2' : 'grid-cols-1'} gap-3`}>
               {isModuleLeader && (
                 <button
                   type="button"

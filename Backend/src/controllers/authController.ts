@@ -40,6 +40,7 @@ export const registerStudent = async (req: Request, res: Response) => {
     await Student.create({
       userId: user._id,
       studentId,
+       fullName: fullName,
       enrollmentYear: enrollmentYear || new Date().getFullYear(),
       status: "active"
       // currentSemester will be set on first login via profile completion

@@ -5,9 +5,12 @@ import Sidebar from '../../components/Sidebar';
 import StatsCard from '../../components/Cardstats';
 import { SubmissionCard } from '../../components/Submissioncard';
 import UserFormModal from '../../components/Userformmodal';
-import { useApiGet, useApiPatch } from '../../hooks/useApi';
+import { useApiGet } from '../../hooks/useApi';
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+
+// ✅ FIX: Add API base URL configuration
+const API_BASE_URL =  'http://localhost:5000/api';
 
 const TeacherGradingDashboard = () => {
   const [activeItem, setActiveItem] = useState('grading');
@@ -21,6 +24,7 @@ const TeacherGradingDashboard = () => {
   const [selectedSubject, setSelectedSubject] = useState('');
   const [selectedGroup, setSelectedGroup] = useState('');
   const [availableGroups, setAvailableGroups] = useState([]);
+  const [gradingLoading, setGradingLoading] = useState(false);
 
   // Fetch teacher's assigned subjects
   const { 
@@ -37,14 +41,74 @@ const TeacherGradingDashboard = () => {
     refetch: refetchSubmissions 
   } = useApiGet('/teacher/submissions/for-grading', { autoFetch: true });
 
-  // Grade submission API
-  const { 
-    patch: gradeSubmissionApi, 
-    loading: gradingLoading 
-  } = useApiPatch({
-    onSuccess: (data) => {
-      console.log('Graded successfully:', data);
-      toast.success('Submission graded successfully!', {
+  // ✅ FIXED: Direct grade submission function with enhanced logging and error handling
+  const gradeSubmissionDirect = async (submissionId, marks, feedback) => {
+    setGradingLoading(true);
+    
+    try {
+      console.log('🚀 Starting grade submission...');
+      console.log('📝 Submission Details:', {
+        submissionId,
+        marks,
+        feedback: feedback || '(no feedback)',
+        timestamp: new Date().toISOString()
+      });
+
+      // ✅ FIX: Validate token exists
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('Authentication token not found. Please log in again.');
+      }
+
+      // ✅ FIX: Use API_BASE_URL instead of hardcoded URL
+      const apiUrl = `${API_BASE_URL}/teacher/submissions/${submissionId}/grade`;
+      console.log('🌐 API URL:', apiUrl);
+
+      // ✅ FIX: Ensure feedback is always a string
+      const requestBody = {
+        marks: Number(marks), // Ensure it's a number
+        feedback: feedback?.trim() || '' // Ensure it's a string, even if empty
+      };
+      console.log('📤 Request Body:', requestBody);
+
+      const response = await fetch(apiUrl, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(requestBody)
+      });
+
+      console.log('📥 Response Status:', response.status);
+      console.log('📥 Response OK:', response.ok);
+
+      // ✅ FIX: Get response text first to handle both JSON and non-JSON responses
+      const responseText = await response.text();
+      console.log('📥 Response Text:', responseText);
+
+      let result;
+      try {
+        result = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('❌ Failed to parse response as JSON:', parseError);
+        throw new Error('Server returned invalid JSON response');
+      }
+
+      if (!response.ok) {
+        console.error('❌ Server Error:', result);
+        throw new Error(result.message || `HTTP error! status: ${response.status}`);
+      }
+
+      console.log('✅ Graded successfully!');
+      console.log('📊 Result:', result);
+      
+      // ✅ FIX: Log the academic history update
+      if (result.academicHistory) {
+        console.log('📚 Academic History Updated:', result.academicHistory);
+      }
+
+      toast.success('✅ Submission graded successfully!', {
         position: "top-right",
         autoClose: 3000,
         hideProgressBar: false,
@@ -52,13 +116,35 @@ const TeacherGradingDashboard = () => {
         pauseOnHover: true,
         draggable: true,
       });
-      refetchSubmissions(); // Refresh submissions list
+      
+      // Refresh submissions list
+      await refetchSubmissions();
+      
+      // Close modal and reset form
       setGradeModal(false);
       setGradeFormData({ marks: '', feedback: '' });
       setSelectedSubmission(null);
-    },
-    onError: (error) => {
-      toast.error(`Error grading submission: ${error}`, {
+      
+      return result;
+      
+    } catch (error) {
+      console.error('❌ ERROR in gradeSubmissionDirect:', error);
+      console.error('❌ Error Type:', error.constructor.name);
+      console.error('❌ Error Message:', error.message);
+      console.error('❌ Error Stack:', error.stack);
+      
+      // ✅ FIX: More descriptive error messages
+      let errorMessage = 'Failed to grade submission';
+      
+      if (error.message.includes('token')) {
+        errorMessage = 'Authentication error. Please log in again.';
+      } else if (error.message.includes('fetch')) {
+        errorMessage = 'Network error. Please check your connection.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      toast.error(`❌ ${errorMessage}`, {
         position: "top-right",
         autoClose: 5000,
         hideProgressBar: false,
@@ -66,8 +152,12 @@ const TeacherGradingDashboard = () => {
         pauseOnHover: true,
         draggable: true,
       });
+      
+      throw error;
+    } finally {
+      setGradingLoading(false);
     }
-  });
+  };
 
   // Show error toasts for API errors
   useEffect(() => {
@@ -168,53 +258,86 @@ const TeacherGradingDashboard = () => {
   // Calculate statistics
   const stats = {
     total: submissions.length,
-    pending: submissions.filter(s => s.status === 'pending').length,
+    pending: submissions.filter(s => s.status === 'pending' || s.status === 'submitted').length,
     graded: submissions.filter(s => s.status === 'graded').length,
     late: submissions.filter(s => s.status === 'late').length
   };
 
-  // Handle grade submission
+  // ✅ FIXED: Enhanced grade submission handler with better validation
   const handleGradeSubmission = async (e) => {
     e.preventDefault();
     
-    if (!selectedSubmission) return;
-
-    const marks = parseFloat(gradeFormData.marks);
+    console.log('🎯 Handle Grade Submission Called');
+    console.log('📋 Selected Submission:', selectedSubmission);
+    console.log('📝 Form Data:', gradeFormData);
     
-    if (isNaN(marks) || marks < 0 || marks > selectedSubmission.maxMarks) {
-      toast.warning(`Marks must be between 0 and ${selectedSubmission.maxMarks}`, {
+    if (!selectedSubmission) {
+      console.error('❌ No submission selected');
+      toast.error('No submission selected', {
+        position: "top-right",
+        autoClose: 3000,
+      });
+      return;
+    }
+
+    // ✅ FIX: Better marks validation
+    const marksInput = gradeFormData.marks?.toString().trim();
+    
+    if (!marksInput) {
+      console.error('❌ Marks field is empty');
+      toast.warning('⚠️ Please enter marks', {
         position: "top-right",
         autoClose: 4000,
-        hideProgressBar: false,
-        closeOnClick: true,
-        pauseOnHover: true,
-        draggable: true,
+      });
+      return;
+    }
+
+    const marks = parseFloat(marksInput);
+    
+    if (isNaN(marks)) {
+      console.error('❌ Invalid marks:', marksInput);
+      toast.warning('⚠️ Please enter valid marks', {
+        position: "top-right",
+        autoClose: 4000,
       });
       return;
     }
 
     if (marks < 0 || marks > selectedSubmission.maxMarks) {
-      toast.warning(`Marks must be between 0 and ${selectedSubmission.maxMarks}`, {
+      console.error('❌ Marks out of range:', marks);
+      toast.warning(`⚠️ Marks must be between 0 and ${selectedSubmission.maxMarks}`, {
         position: "top-right",
         autoClose: 4000,
       });
       return;
     }
 
-    await gradeSubmissionApi(`/teacher/submissions/${selectedSubmission.id}/grade`, {
-      marks: marks,
-      feedback: gradeFormData.feedback || ''
-    });
+    console.log('✅ Validation passed. Submitting grade...');
+
+    try {
+      await gradeSubmissionDirect(
+        selectedSubmission.id, 
+        marks, 
+        gradeFormData.feedback || ''
+      );
+    } catch (error) {
+      console.error('❌ Grade submission failed in handler:', error);
+      // Error is already handled in gradeSubmissionDirect
+    }
   };
 
-  // Open grade modal
+  // ✅ FIXED: Enhanced open grade modal with logging
   const openGradeModal = (submission) => {
+    console.log('📖 Opening grade modal for:', submission);
+    
     setSelectedSubmission(submission);
     setGradeFormData({
       marks: submission.marks?.toString() || '',
       feedback: submission.feedback || ''
     });
     setGradeModal(true);
+    
+    console.log('✅ Grade modal opened');
   };
 
   // Define form fields for grading modal
@@ -226,7 +349,8 @@ const TeacherGradingDashboard = () => {
       placeholder: 'Enter marks',
       required: true,
       min: 0,
-      max: selectedSubmission.maxMarks
+      max: selectedSubmission.maxMarks,
+      step: 0.5
     },
     {
       name: 'feedback',
@@ -443,9 +567,9 @@ const TeacherGradingDashboard = () => {
                         All
                       </button>
                       <button
-                        onClick={() => handleFilterStatus('pending')}
+                        onClick={() => handleFilterStatus('submitted')}
                         className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                          filterStatus === 'pending'
+                          filterStatus === 'submitted'
                             ? 'bg-yellow-600 text-white'
                             : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                         }`}

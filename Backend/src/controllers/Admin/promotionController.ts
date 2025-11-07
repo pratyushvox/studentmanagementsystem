@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import Student from "../../models/Student";
-import Group from "../../models/Group";
+import Submission from "../../models/Submission";
 import Assignment from "../../models/Assignment";
 import Attendance from "../../models/Attendance";
 import mongoose from "mongoose";
@@ -10,11 +10,14 @@ interface CustomRequest extends Request {
 }
 
 // Calculate attendance percentage for a student in a semester
-const calculateAttendancePercentage = async (studentId: mongoose.Types.ObjectId, semester: number): Promise<number> => {
+export const calculateAttendancePercentage = async (
+  studentId: mongoose.Types.ObjectId,
+  semester: number
+): Promise<number> => {
   try {
     const attendanceRecords = await Attendance.find({
       semester,
-      "attendanceRecords.studentId": studentId
+      "attendanceRecords.studentId": studentId,
     });
 
     if (attendanceRecords.length === 0) return 0;
@@ -22,14 +25,17 @@ const calculateAttendancePercentage = async (studentId: mongoose.Types.ObjectId,
     let totalClasses = 0;
     let attendedClasses = 0;
 
-    attendanceRecords.forEach(record => {
+    attendanceRecords.forEach((record) => {
       const studentRecord = record.attendanceRecords.find(
-        r => r.studentId.toString() === studentId.toString()
+        (r) => r.studentId.toString() === studentId.toString()
       );
 
       if (studentRecord) {
         totalClasses++;
-        if (studentRecord.status === "present" || studentRecord.status === "late") {
+        if (
+          studentRecord.status === "present" ||
+          studentRecord.status === "late"
+        ) {
           attendedClasses++;
         }
       }
@@ -42,34 +48,178 @@ const calculateAttendancePercentage = async (studentId: mongoose.Types.ObjectId,
   }
 };
 
-// Check if student passed all main assignments (obtainedMarks >= passingMarks)
-const checkMainAssignmentsPassed = (semesterHistory: any[]): boolean => {
-  const mainAssignments = semesterHistory.filter(a => a.assignmentType === "main");
-  if (mainAssignments.length === 0) return false;
-  return mainAssignments.every(a => a.obtainedMarks !== undefined && a.obtainedMarks >= (a.passingMarks || 40));
+// Get student's graded submissions for a semester
+export const getStudentSubmissions = async (
+  studentId: mongoose.Types.ObjectId,
+  semester: number
+) => {
+  try {
+    // Fetch all graded submissions for the student
+    const submissions = await Submission.find({
+      studentId: studentId,
+      status: "graded",
+    })
+      .populate({
+        path: "assignmentId",
+        select: "title type maxMarks semester subjectId",
+      })
+      .populate("subjectId", "name code")
+      .lean();
+
+    // Filter by semester (from assignment)
+    const semesterSubmissions = submissions.filter(
+      (sub: any) => sub.assignmentId?.semester === semester
+    );
+
+    return semesterSubmissions;
+  } catch (error) {
+    console.error("Error fetching submissions:", error);
+    return [];
+  }
 };
 
-// Check if main assignments are completed (submitted)
-const checkMainAssignmentsCompleted = (semesterHistory: any[]): boolean => {
-  const mainAssignments = semesterHistory.filter(a => a.assignmentType === "main");
-  return mainAssignments.length > 0 && mainAssignments.every(a => a.obtainedMarks !== undefined);
+// Check if all main assignments are passed
+export const checkMainAssignmentsPassed = (submissions: any[]): boolean => {
+  const mainSubmissions = submissions.filter(
+    (s: any) => s.assignmentId?.type === "main" && s.type === "main"
+  );
+
+  if (mainSubmissions.length === 0) return false;
+
+  // Check if all main assignments have passing marks (40% or more)
+  return mainSubmissions.every((sub: any) => {
+    const percentage = (sub.marks / sub.assignmentId.maxMarks) * 100;
+    return percentage >= 40;
+  });
 };
 
-// Get main assignment results for reporting
-const getMainAssignmentResults = (semesterHistory: any[]): any[] => {
-  const mainAssignments = semesterHistory.filter(a => a.assignmentType === "main");
-  return mainAssignments.map(a => ({
-    assignmentId: a._id,
-    subjectId: a.subjectId,
-    obtainedMarks: a.obtainedMarks,
-    totalMarks: a.totalMarks,
-    passingMarks: a.passingMarks,
-    passed: a.obtainedMarks >= (a.passingMarks || 40),
-  }));
+// Check if main assignments are completed
+export const checkMainAssignmentsCompleted = (submissions: any[]): boolean => {
+  const mainSubmissions = submissions.filter(
+    (s: any) => s.assignmentId?.type === "main" && s.type === "main"
+  );
+  return mainSubmissions.length > 0;
 };
 
+// Get detailed main assignment results
+export const getMainAssignmentResults = (submissions: any[]): any[] => {
+  const mainSubmissions = submissions.filter(
+    (s: any) => s.assignmentId?.type === "main" && s.type === "main"
+  );
 
-// Promote students from a specific semester with attendance and assignment checks
+  return mainSubmissions.map((sub: any) => {
+    const percentage = (sub.marks / sub.assignmentId.maxMarks) * 100;
+    return {
+      submissionId: sub._id,
+      assignmentTitle: sub.assignmentId?.title,
+      subjectId: sub.subjectId?._id,
+      subjectName: sub.subjectId?.name,
+      subjectCode: sub.subjectId?.code,
+      obtainedMarks: sub.marks,
+      maxMarks: sub.assignmentId?.maxMarks,
+      percentage: Math.round(percentage * 100) / 100,
+      passed: percentage >= 40,
+      gradedAt: sub.gradedAt,
+      feedback: sub.feedback,
+    };
+  });
+};
+
+// Calculate subject-wise results
+export const calculateSubjectResults = (submissions: any[]): any[] => {
+  const subjectMap = new Map();
+
+  submissions.forEach((sub: any) => {
+    const subjectId = sub.subjectId?._id?.toString();
+    if (!subjectId) return;
+
+    if (!subjectMap.has(subjectId)) {
+      subjectMap.set(subjectId, {
+        subjectId: sub.subjectId._id,
+        subjectName: sub.subjectId.name,
+        subjectCode: sub.subjectId.code,
+        totalObtained: 0,
+        totalMax: 0,
+        mainAssignment: null,
+        weeklyAssignments: [],
+      });
+    }
+
+    const subject = subjectMap.get(subjectId);
+    subject.totalObtained += sub.marks;
+    subject.totalMax += sub.assignmentId.maxMarks;
+
+    if (sub.assignmentId?.type === "main") {
+      subject.mainAssignment = {
+        marks: sub.marks,
+        maxMarks: sub.assignmentId.maxMarks,
+        percentage: (sub.marks / sub.assignmentId.maxMarks) * 100,
+      };
+    } else {
+      subject.weeklyAssignments.push({
+        marks: sub.marks,
+        maxMarks: sub.assignmentId.maxMarks,
+      });
+    }
+  });
+
+  // Calculate percentage and grade for each subject
+  return Array.from(subjectMap.values()).map((subject: any) => {
+    const percentage =
+      subject.totalMax > 0 ? (subject.totalObtained / subject.totalMax) * 100 : 0;
+
+    let grade = "F";
+    if (percentage >= 90) grade = "A+";
+    else if (percentage >= 80) grade = "A";
+    else if (percentage >= 70) grade = "B+";
+    else if (percentage >= 60) grade = "B";
+    else if (percentage >= 50) grade = "C+";
+    else if (percentage >= 40) grade = "C";
+
+    return {
+      ...subject,
+      percentage: Math.round(percentage * 100) / 100,
+      grade,
+      passed: percentage >= 40,
+    };
+  });
+};
+
+// Helper function to update academic history
+const updateAcademicHistory = async (
+  student: any, 
+  semester: number, 
+  passed: boolean, 
+  promotedBy: mongoose.Types.ObjectId
+) => {
+  try {
+    // Find the academic history record for this semester
+    const semesterRecordIndex = student.academicHistory.findIndex(
+      (record: any) => record.semester === semester
+    );
+
+    if (semesterRecordIndex !== -1) {
+      // Update existing record
+      student.academicHistory[semesterRecordIndex].semesterPassed = passed;
+      student.academicHistory[semesterRecordIndex].promotedAt = new Date();
+      student.academicHistory[semesterRecordIndex].promotedBy = promotedBy;
+    } else {
+      // Create new record if it doesn't exist
+      student.academicHistory.push({
+        semester,
+        groupId: student.groupId, // Keep the current group ID
+        subjects: [], // You might want to populate this with subject data later
+        semesterPassed: passed,
+        promotedAt: new Date(),
+        promotedBy: promotedBy,
+      });
+    }
+  } catch (error) {
+    console.error("Error updating academic history:", error);
+  }
+};
+
+// Promote students from a specific semester
 export const promoteSemester = async (req: CustomRequest, res: Response) => {
   try {
     if (!req.user) {
@@ -83,10 +233,11 @@ export const promoteSemester = async (req: CustomRequest, res: Response) => {
       return res.status(400).json({ message: "Invalid semester" });
     }
 
+    //  Select academicHistory field
     const students = await Student.find({
       currentSemester: semesterNum,
-      status: { $in: ["active", "failed"] }
-    });
+      status: { $in: ["active", "failed"] },
+    }).select("studentId userId fullName status currentSemester groupId academicHistory");
 
     let promoted = 0;
     let failed = 0;
@@ -95,53 +246,76 @@ export const promoteSemester = async (req: CustomRequest, res: Response) => {
     const results: any[] = [];
 
     for (const student of students) {
-      // Filter assignments of this semester - academicHistory is an array of assignment records
-      const semesterHistory = student.academicHistory.filter((h: any) => h.semester === semesterNum);
+      const submissions = await getStudentSubmissions(student._id, semesterNum);
 
-      if (!semesterHistory || semesterHistory.length === 0) {
+      if (!submissions || submissions.length === 0) {
         failed++;
+        student.status = "failed";
+        
+        //  Set semesterPassed to false in academic history
+        await updateAcademicHistory(student, semesterNum, false, req.user._id);
+        await student.save();
+        
         results.push({
           studentId: student._id,
           studentCode: student.studentId,
+          fullName: student.fullName,
           status: "failed",
-          reason: "No academic history found"
+          reason: "No graded submissions found",
+          attendancePercentage: 0,
+          submissions: [],
         });
         continue;
       }
 
-      const attendancePercentage = await calculateAttendancePercentage(student._id, semesterNum);
-      const mainAssignmentsPassed = checkMainAssignmentsPassed(semesterHistory);
-      const mainAssignmentsCompleted = checkMainAssignmentsCompleted(semesterHistory);
-      const assignmentResults = getMainAssignmentResults(semesterHistory);
+      const attendancePercentage = await calculateAttendancePercentage(
+        student._id,
+        semesterNum
+      );
+      const mainAssignmentsPassed = checkMainAssignmentsPassed(submissions);
+      const mainAssignmentsCompleted = checkMainAssignmentsCompleted(submissions);
+      const mainAssignmentResults = getMainAssignmentResults(submissions);
+      const subjectResults = calculateSubjectResults(submissions);
 
       if (attendancePercentage >= 75 && mainAssignmentsPassed) {
-        // Auto promotion - mark all semester assignments as passed
-        semesterHistory.forEach((h: any) => h.semesterPassed = true);
-        
+        // Auto promotion
         if (semesterNum === 8) {
           student.status = "graduated";
           student.currentSemester = 8;
+          
+          //  Set semesterPassed to true in academic history
+          await updateAcademicHistory(student, semesterNum, true, req.user._id);
+          
           graduated++;
           results.push({
             studentId: student._id,
             studentCode: student.studentId,
+            fullName: student.fullName,
             status: "graduated",
-            attendancePercentage,
+            attendancePercentage: Math.round(attendancePercentage * 100) / 100,
             mainAssignmentsPassed: true,
-            assignmentResults
+            mainAssignmentResults,
+            subjectResults,
           });
         } else {
           student.status = "promoted";
           student.currentSemester = semesterNum + 1;
           student.groupId = undefined;
+          
+          //  Set semesterPassed to true in academic history
+          await updateAcademicHistory(student, semesterNum, true, req.user._id);
+          
           promoted++;
           results.push({
             studentId: student._id,
             studentCode: student.studentId,
+            fullName: student.fullName,
             status: "promoted",
-            attendancePercentage,
+            newSemester: semesterNum + 1,
+            attendancePercentage: Math.round(attendancePercentage * 100) / 100,
             mainAssignmentsPassed: true,
-            assignmentResults
+            mainAssignmentResults,
+            subjectResults,
           });
         }
       } else if (mainAssignmentsPassed && attendancePercentage < 75) {
@@ -149,45 +323,58 @@ export const promoteSemester = async (req: CustomRequest, res: Response) => {
         manualPromotionRequired.push({
           studentId: student._id,
           studentCode: student.studentId,
-          attendancePercentage,
+          fullName: student.fullName,
+          attendancePercentage: Math.round(attendancePercentage * 100) / 100,
           mainAssignmentsPassed: true,
-          currentStatus: student.status,
-          assignmentResults
+          mainAssignmentResults,
+          subjectResults,
         });
         results.push({
           studentId: student._id,
           studentCode: student.studentId,
+          fullName: student.fullName,
           status: "manual_review_required",
-          attendancePercentage,
+          attendancePercentage: Math.round(attendancePercentage * 100) / 100,
           mainAssignmentsPassed: true,
-          assignmentResults,
-          reason: "Low attendance but passed main assignments"
+          mainAssignmentResults,
+          subjectResults,
+          reason: "Low attendance but passed main assignments",
         });
       } else if (!mainAssignmentsCompleted) {
         student.status = "failed";
-        semesterHistory.forEach((h: any) => h.semesterPassed = false);
+        
+        //  Set semesterPassed to false in academic history
+        await updateAcademicHistory(student, semesterNum, false, req.user._id);
+        
         failed++;
         results.push({
           studentId: student._id,
           studentCode: student.studentId,
+          fullName: student.fullName,
           status: "failed",
-          attendancePercentage,
+          attendancePercentage: Math.round(attendancePercentage * 100) / 100,
           mainAssignmentsPassed: false,
-          assignmentResults,
-          reason: "Main assignments not completed"
+          mainAssignmentResults,
+          subjectResults,
+          reason: "Main assignments not completed",
         });
       } else {
         student.status = "failed";
-        semesterHistory.forEach((h: any) => h.semesterPassed = false);
+        
+        // Set semesterPassed to false in academic history
+        await updateAcademicHistory(student, semesterNum, false, req.user._id);
+        
         failed++;
         results.push({
           studentId: student._id,
           studentCode: student.studentId,
+          fullName: student.fullName,
           status: "failed",
-          attendancePercentage,
+          attendancePercentage: Math.round(attendancePercentage * 100) / 100,
           mainAssignmentsPassed: false,
-          assignmentResults,
-          reason: "Failed main assignments (marks below passing marks)"
+          mainAssignmentResults,
+          subjectResults,
+          reason: "Failed main assignments (marks below 40%)",
         });
       }
 
@@ -203,15 +390,19 @@ export const promoteSemester = async (req: CustomRequest, res: Response) => {
       graduated,
       manualPromotionRequired: manualPromotionRequired.length,
       manualPromotionList: manualPromotionRequired,
-      results
+      results,
     });
   } catch (error: any) {
+    console.error("Error in promoteSemester:", error);
     res.status(500).json({ message: error.message });
   }
 };
 
-// Manually promote specific students (for cases with low attendance but passed assignments)
-export const manuallyPromoteStudents = async (req: CustomRequest, res: Response) => {
+// Manually promote specific students
+export const manuallyPromoteStudents = async (
+  req: CustomRequest,
+  res: Response
+) => {
   try {
     if (!req.user) {
       return res.status(401).json({ message: "User not authenticated" });
@@ -229,57 +420,64 @@ export const manuallyPromoteStudents = async (req: CustomRequest, res: Response)
 
     for (const studentId of studentIds) {
       try {
-        const student = await Student.findById(studentId);
+        // ✅ UPDATED: Select academicHistory field
+        const student = await Student.findById(studentId).select("studentId fullName status currentSemester groupId academicHistory");
         if (!student) {
           failed.push({ studentId, reason: "Student not found" });
           continue;
         }
 
-        // Get current semester history - filter all records for this semester
-        const semesterHistory = student.academicHistory.filter(
-          (h: any) => h.semester === semesterNum
-        );
+        const submissions = await getStudentSubmissions(student._id, semesterNum);
 
-        if (!semesterHistory || semesterHistory.length === 0) {
-          failed.push({ studentId, reason: "No academic history for this semester" });
-          continue;
-        }
-
-        // Verify that main assignments are passed
-        const mainAssignmentsPassed = checkMainAssignmentsPassed(semesterHistory);
-        if (!mainAssignmentsPassed) {
-          failed.push({ 
-            studentId, 
-            reason: "Main assignments not passed (need at least passing marks in each)",
-            assignmentResults: getMainAssignmentResults(semesterHistory)
+        if (!submissions || submissions.length === 0) {
+          failed.push({
+            studentId,
+            reason: "No graded submissions for this semester",
           });
           continue;
         }
 
-        // Manual promotion - mark all semester records as passed
-        semesterHistory.forEach((h: any) => {
-          h.semesterPassed = true;
-          h.promotedAt = new Date();
-          h.promotedBy = req.user._id;
-          h.manualPromotionReason = reason;
-        });
+        const mainAssignmentsPassed = checkMainAssignmentsPassed(submissions);
+        if (!mainAssignmentsPassed) {
+          const mainResults = getMainAssignmentResults(submissions);
+          failed.push({
+            studentId,
+            reason: "Main assignments not passed (need at least 40% in each)",
+            mainAssignmentResults: mainResults,
+          });
+          continue;
+        }
 
+        // Manual promotion approved
         if (semesterNum === 8) {
           student.status = "graduated";
           student.currentSemester = 8;
+          
+          // ✅ UPDATE: Set semesterPassed to true in academic history
+          await updateAcademicHistory(student, semesterNum, true, req.user._id);
         } else {
           student.status = "promoted";
           student.currentSemester = semesterNum + 1;
           student.groupId = undefined;
+          
+          // ✅ UPDATE: Set semesterPassed to true in academic history
+          await updateAcademicHistory(student, semesterNum, true, req.user._id);
         }
 
         await student.save();
+
+        const mainResults = getMainAssignmentResults(submissions);
+        const subjectResults = calculateSubjectResults(submissions);
+
         promoted.push({
           studentId: student._id,
           studentCode: student.studentId,
+          fullName: student.fullName,
           newSemester: student.currentSemester,
           status: student.status,
-          assignmentResults: getMainAssignmentResults(semesterHistory)
+          reason: reason || "Manual promotion approved",
+          mainAssignmentResults: mainResults,
+          subjectResults,
         });
       } catch (error: any) {
         failed.push({ studentId, reason: error.message });
@@ -291,9 +489,10 @@ export const manuallyPromoteStudents = async (req: CustomRequest, res: Response)
       promoted: promoted.length,
       failed: failed.length,
       promotedStudents: promoted,
-      failedStudents: failed
+      failedStudents: failed,
     });
   } catch (error: any) {
+    console.error("Error in manuallyPromoteStudents:", error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -308,21 +507,48 @@ export const getPromotionReport = async (req: Request, res: Response) => {
       return res.status(400).json({ message: "Invalid semester" });
     }
 
+    // ✅ ADDED: Populate fullName from Student model
     const students = await Student.find({
-      currentSemester: semesterNum
-    }).select("studentId userId status academicHistory");
+      currentSemester: semesterNum,
+    }).select("studentId userId fullName status currentSemester groupId academicHistory");
 
     const report = await Promise.all(
       students.map(async (student) => {
-        // Filter semester history - it's an array of assignment records
-        const semesterHistory = student.academicHistory.filter(
-          (h: any) => h.semester === semesterNum
+        const submissions = await getStudentSubmissions(student._id, semesterNum);
+        const attendancePercentage = await calculateAttendancePercentage(
+          student._id,
+          semesterNum
         );
 
-        const attendancePercentage = await calculateAttendancePercentage(student._id, semesterNum);
-        const mainAssignmentsPassed = checkMainAssignmentsPassed(semesterHistory);
-        const mainAssignmentsCompleted = checkMainAssignmentsCompleted(semesterHistory);
-        const assignmentResults = getMainAssignmentResults(semesterHistory);
+        // Find academic history for this semester
+        const semesterHistory = student.academicHistory.find(
+          (history: any) => history.semester === semesterNum
+        );
+
+        if (!submissions || submissions.length === 0) {
+          return {
+            studentId: student._id,
+            studentCode: student.studentId,
+            fullName: student.fullName,
+            currentStatus: student.status,
+            attendancePercentage: Math.round(attendancePercentage * 100) / 100,
+            mainAssignmentsPassed: false,
+            mainAssignmentsCompleted: false,
+            assignmentResults: [],
+            promotionEligibility: "failed",
+            reason: "No graded submissions",
+            totalAssignments: 0,
+            mainAssignmentsCount: 0,
+            subjectResults: [],
+            groupId: student.groupId,
+            semesterPassed: semesterHistory?.semesterPassed || false,
+          };
+        }
+
+        const mainAssignmentsPassed = checkMainAssignmentsPassed(submissions);
+        const mainAssignmentsCompleted = checkMainAssignmentsCompleted(submissions);
+        const mainAssignmentResults = getMainAssignmentResults(submissions);
+        const subjectResults = calculateSubjectResults(submissions);
 
         let eligibility = "failed";
         let reason = "";
@@ -338,21 +564,25 @@ export const getPromotionReport = async (req: Request, res: Response) => {
           reason = "Passed assignments but low attendance";
         } else {
           eligibility = "failed";
-          reason = "Failed main assignments (marks below passing marks)";
+          reason = "Failed main assignments (marks below 40%)";
         }
 
         return {
           studentId: student._id,
           studentCode: student.studentId,
+          fullName: student.fullName,
           currentStatus: student.status,
           attendancePercentage: Math.round(attendancePercentage * 100) / 100,
           mainAssignmentsPassed,
           mainAssignmentsCompleted,
-          assignmentResults,
+          assignmentResults: mainAssignmentResults,
+          subjectResults,
           promotionEligibility: eligibility,
           reason,
-          totalAssignments: semesterHistory.length,
-          mainAssignmentsCount: semesterHistory.filter((h: any) => h.assignmentType === "main").length
+          totalAssignments: submissions.length,
+          mainAssignmentsCount: mainAssignmentResults.length,
+          groupId: student.groupId,
+          semesterPassed: semesterHistory?.semesterPassed || false, 
         };
       })
     );
@@ -360,87 +590,16 @@ export const getPromotionReport = async (req: Request, res: Response) => {
     res.status(200).json({
       semester: semesterNum,
       totalStudents: report.length,
-      autoPromote: report.filter(r => r.promotionEligibility === "auto_promote").length,
-      manualPromote: report.filter(r => r.promotionEligibility === "manual_promote").length,
-      failed: report.filter(r => r.promotionEligibility === "failed").length,
-      report
+      autoPromote: report.filter((r) => r.promotionEligibility === "auto_promote")
+        .length,
+      manualPromote: report.filter(
+        (r) => r.promotionEligibility === "manual_promote"
+      ).length,
+      failed: report.filter((r) => r.promotionEligibility === "failed").length,
+      report,
     });
   } catch (error: any) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-// Calculate student's subject result based on submissions
-export const calculateSubjectResult = async (req: Request, res: Response) => {
-  try {
-    const { studentId, semester } = req.body;
-
-    const student = await Student.findById(studentId);
-    if (!student) {
-      return res.status(404).json({ message: "Student not found" });
-    }
-
-    const semesterHistory = student.academicHistory.filter(
-      (h: any) => h.semester === semester
-    );
-
-    if (!semesterHistory || semesterHistory.length === 0) {
-      return res.status(404).json({ message: "Semester history not found" });
-    }
-
-    // Group by subject
-    const subjectResults: any = {};
-
-    semesterHistory.forEach((record: any) => {
-      const subjectId = record.subjectId.toString();
-      
-      if (!subjectResults[subjectId]) {
-        subjectResults[subjectId] = {
-          subjectId: record.subjectId,
-          totalObtained: 0,
-          totalMax: 0,
-          assignments: []
-        };
-      }
-
-      subjectResults[subjectId].totalObtained += record.obtainedMarks || 0;
-      subjectResults[subjectId].totalMax += record.totalMarks || 0;
-      subjectResults[subjectId].assignments.push({
-        type: record.assignmentType,
-        obtainedMarks: record.obtainedMarks,
-        totalMarks: record.totalMarks,
-        passingMarks: record.passingMarks,
-        status: record.status
-      });
-    });
-
-    // Calculate grades for each subject
-    Object.values(subjectResults).forEach((subject: any) => {
-      const percentage = subject.totalMax > 0 ? (subject.totalObtained / subject.totalMax) * 100 : 0;
-      subject.percentage = percentage;
-
-      // Grading system
-      if (percentage >= 90) subject.grade = "A+";
-      else if (percentage >= 80) subject.grade = "A";
-      else if (percentage >= 70) subject.grade = "B+";
-      else if (percentage >= 60) subject.grade = "B";
-      else if (percentage >= 50) subject.grade = "C+";
-      else if (percentage >= 40) subject.grade = "C";
-      else subject.grade = "F";
-
-      subject.passed = percentage >= 40;
-    });
-
-    res.status(200).json({
-      message: "Subject results calculated",
-      student: {
-        _id: student._id,
-        studentId: student.studentId,
-        status: student.status
-      },
-      subjects: Object.values(subjectResults)
-    });
-  } catch (error: any) {
+    console.error("Error in getPromotionReport:", error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -451,40 +610,82 @@ export const getStudentMainAssignments = async (req: Request, res: Response) => 
     const { studentId, semester } = req.params;
     const semesterNum = parseInt(semester);
 
-    const student = await Student.findById(studentId);
+    // ✅ ADDED: Select fullName field
+    const student = await Student.findById(studentId).select("studentId fullName status currentSemester academicHistory");
     if (!student) {
       return res.status(404).json({ message: "Student not found" });
     }
 
-    const semesterHistory = student.academicHistory.filter(
-      (h: any) => h.semester === semesterNum && h.assignmentType === "main"
+    const submissions = await getStudentSubmissions(student._id, semesterNum);
+    const mainAssignmentResults = getMainAssignmentResults(submissions);
+
+    // Find academic history for this semester
+    const semesterHistory = student.academicHistory.find(
+      (history: any) => history.semester === semesterNum
     );
 
-    if (!semesterHistory || semesterHistory.length === 0) {
-      return res.status(404).json({ message: "No main assignments found for this semester" });
+    if (mainAssignmentResults.length === 0) {
+      return res.status(404).json({
+        message: "No main assignments found for this semester",
+      });
     }
-
-    const mainAssignments = semesterHistory.map((assignment: any) => ({
-      assignmentId: assignment._id,
-      subjectId: assignment.subjectId,
-      obtainedMarks: assignment.obtainedMarks !== undefined ? assignment.obtainedMarks : 'Not graded',
-      totalMarks: assignment.totalMarks || 0,
-      passingMarks: assignment.passingMarks || 40,
-      passed: assignment.obtainedMarks !== undefined && assignment.obtainedMarks >= (assignment.passingMarks || 40),
-      completed: assignment.obtainedMarks !== undefined,
-      status: assignment.status,
-      updatedAt: assignment.updatedAt
-    }));
 
     res.status(200).json({
       studentId: student._id,
       studentCode: student.studentId,
+      fullName: student.fullName,
       semester: semesterNum,
-      mainAssignments,
-      allPassed: mainAssignments.every((ma: any) => ma.passed),
-      allCompleted: mainAssignments.every((ma: any) => ma.completed)
+      mainAssignments: mainAssignmentResults,
+      allPassed: mainAssignmentResults.every((ma: any) => ma.passed),
+      allCompleted: mainAssignmentResults.length > 0,
+      semesterPassed: semesterHistory?.semesterPassed || false, 
     });
   } catch (error: any) {
+    console.error("Error in getStudentMainAssignments:", error);
     res.status(500).json({ message: error.message });
   }
-};  
+};
+
+// Calculate student's subject result
+export const calculateSubjectResult = async (req: Request, res: Response) => {
+  try {
+    const { studentId, semester } = req.body;
+
+    // ✅ ADDED: Select fullName field
+    const student = await Student.findById(studentId).select("studentId fullName status currentSemester academicHistory");
+    if (!student) {
+      return res.status(404).json({ message: "Student not found" });
+    }
+
+    const submissions = await getStudentSubmissions(student._id, semester);
+
+    if (!submissions || submissions.length === 0) {
+      return res.status(404).json({
+        message: "No submissions found for this semester",
+      });
+    }
+
+    const subjectResults = calculateSubjectResults(submissions);
+
+    // Find academic history for this semester
+    const semesterHistory = student.academicHistory.find(
+      (history: any) => history.semester === semester
+    );
+
+    res.status(200).json({
+      message: "Subject results calculated",
+      student: {
+        _id: student._id,
+        studentId: student.studentId,
+        fullName: student.fullName,
+        status: student.status,
+      },
+      semester,
+      subjects: subjectResults,
+      semesterPassed: semesterHistory?.semesterPassed || false, 
+    });
+  } catch (error: any) {
+    console.error("Error in calculateSubjectResult:", error);
+    res.status(500).json({ message: error.message });
+  }
+};

@@ -1,4 +1,4 @@
-// Updated Admin Routes with Complete Subject-Teacher Management
+
 import express from "express";
 import { protect, adminOnly } from "../middleware/authMiddleware";
 
@@ -21,8 +21,8 @@ import {
   getSubjectStatistics,
   getModuleLeaderSubjects,
   getAvailableTeachersForSubject,
-  assignSubjectToTeacher,        // 🔥 MOVED HERE
-  removeSubjectFromTeacher       // 🔥 MOVED HERE
+  assignSubjectToTeacher,        
+  removeSubjectFromTeacher       
 } from "../controllers/Admin/subjectController";
 
 // Group Management
@@ -44,7 +44,8 @@ import {
   manuallyPromoteStudents,
   getPromotionReport,
   calculateSubjectResult,
-  getStudentMainAssignments
+  getStudentMainAssignments,
+  
 } from "../controllers/Admin/promotionController";
 
 // Assignment Management (View/Delete Only)
@@ -94,7 +95,7 @@ import {
   getTeacherDetails,
   updateTeacherDetails,
   getUnassignedTeachers,
-  assignGroupsToTeacherSubject,  // 🔥 KEEP ONLY THIS ONE
+  assignGroupsToTeacherSubject,  
   getTeacherWorkload
 } from "../controllers/Admin/Teachercontroller";
 
@@ -109,31 +110,22 @@ import {
 
 const adminRouter = express.Router();
 
-/* ============================================================
- 📊 DASHBOARD
-============================================================ */
+//dashboard
 adminRouter.get("/dashboard", protect, adminOnly, getDashboardStats);
 adminRouter.get('/semester-stats', protect, adminOnly, getSemesterStats);
 
-/* ============================================================
- 👥 USER CREATION & APPROVAL
-============================================================ */
+//user creartion
 adminRouter.post("/create-student", protect, adminOnly, createStudent);
 adminRouter.post("/create-teacher", protect, adminOnly, createTeacher);
 adminRouter.patch("/users/:id/approve", protect, adminOnly, approveStudent);
 
-/* ============================================================
- 👤 USER MANAGEMENT
-============================================================ */
+//user management
 adminRouter.get("/users", protect, adminOnly, getAllUsers);          
 adminRouter.get("/users/:id", protect, adminOnly, getUserById);      
 adminRouter.put("/users/:id", protect, adminOnly, updateUser);       
 adminRouter.delete("/users/:id", protect, adminOnly, deleteUser);    
 
-/* ============================================================
- 📚 SUBJECT MANAGEMENT
-============================================================ */
-// Statistics
+//statsitisc subject
 adminRouter.get("/subjects/statistics", protect, adminOnly, getSubjectStatistics);
 
 // CRUD
@@ -149,16 +141,14 @@ adminRouter.patch("/subjects/:subjectId/module-leader", protect, adminOnly, assi
 adminRouter.delete("/subjects/:subjectId/module-leader", protect, adminOnly, removeModuleLeader);
 adminRouter.get("/subjects/module-leader/:teacherId", protect, adminOnly, getModuleLeaderSubjects);
 
-// 🔥 NEW: Get available teachers for subject assignment
+// Get available teachers for subject assignment
 adminRouter.get("/subjects/:subjectId/available-teachers", protect, adminOnly, getAvailableTeachersForSubject);
 
 // Teacher-Subject Assignment (MOVED TO SUBJECT MANAGEMENT SECTION)
 adminRouter.post("/teachers/:teacherId/subjects", protect, adminOnly, assignSubjectToTeacher);
 adminRouter.delete("/teachers/:teacherId/subjects/:subjectId", protect, adminOnly, removeSubjectFromTeacher);
 
-/* ============================================================
- 👨‍👩‍👧‍👦 GROUP MANAGEMENT
-============================================================ */
+//group management
 adminRouter.post("/groups", protect, adminOnly, createGroup);
 adminRouter.get("/groups", protect, adminOnly, getAllGroups);
 adminRouter.get("/groups/semester/:semester", protect, adminOnly, getGroupsBySemester);
@@ -171,9 +161,8 @@ adminRouter.post("/groups/assign-student", protect, adminOnly, assignStudentToGr
 adminRouter.post("/groups/auto-assign-students", protect, adminOnly, autoAssignStudents);
 adminRouter.get("/groups/:id/students", protect, adminOnly, getStudentsByGroup); 
 
-/* ============================================================
- 🎓 PROMOTION & RESULTS
-============================================================ */
+
+//promotion and results
 // Automatic promotion for semester
 adminRouter.post("/promote/:semester", protect, adminOnly, promoteSemester);
 
@@ -189,51 +178,40 @@ adminRouter.get("/students/:studentId/main-assignments/:semester", protect, admi
 // Calculate subject results
 adminRouter.post("/calculate-result", protect, adminOnly, calculateSubjectResult);
 
-/* ============================================================
- 📘 ASSIGNMENT MANAGEMENT (View/Delete Only)
-============================================================ */
+
+
+//Assignment management
 adminRouter.get("/assignments", protect, adminOnly, getAllAssignments);
 adminRouter.get("/assignments/:id", protect, adminOnly, getAssignmentById);
 adminRouter.delete("/assignments/:id", protect, adminOnly, deleteAnyAssignment);
 
-/* ============================================================
- 📰 POST MANAGEMENT (View/Delete Only)
-============================================================ */
+//Post management
 adminRouter.get("/posts", protect, adminOnly, getAllPosts);
 adminRouter.get("/posts/:id", protect, adminOnly, getPostById);
 adminRouter.delete("/posts/:id", protect, adminOnly, deleteAnyPost);
 
-/* ============================================================
- 🧾 SUBMISSION MANAGEMENT (View/Delete Only)
-============================================================ */
+//Submission management
 adminRouter.get("/submissions", protect, adminOnly, getAllSubmissions);
 adminRouter.get("/submissions/:id", protect, adminOnly, getSubmissionById);
 adminRouter.delete("/submissions/:id", protect, adminOnly, deleteAnySubmission);
 
-/* ============================================================
- 🎓 STUDENT DETAILS MANAGEMENT
-============================================================ */
+//Student details
 adminRouter.get("/students-with-details", protect, adminOnly, getAllStudentsWithDetails);
 adminRouter.get("/students/unassigned/list", protect, adminOnly, getUnassignedStudents);
 adminRouter.get("/students/semester/:semester", protect, adminOnly, getStudentsBySemester);
 adminRouter.get("/students/:studentId", protect, adminOnly, getStudentDetails);
 adminRouter.put("/students/:studentId", protect, adminOnly, updateStudentDetails);
 
-/* ============================================================
- 👨‍🏫 TEACHER DETAILS MANAGEMENT
-============================================================ */
+//Teacher Details
 adminRouter.get("/teachers-with-details", protect, adminOnly, getAllTeachersWithDetails);
 adminRouter.get("/teachers/unassigned/list", protect, adminOnly, getUnassignedTeachers);
 adminRouter.get("/teachers/:teacherId", protect, adminOnly, getTeacherDetails);
 adminRouter.put("/teachers/:teacherId", protect, adminOnly, updateTeacherDetails);
 adminRouter.get("/teachers/:teacherId/workload", protect, adminOnly, getTeacherWorkload);
 
-// Group assignment for specific teacher-subject (KEPT IN TEACHER SECTION)
 adminRouter.patch("/teachers/:teacherId/subjects/:subjectId/groups", protect, adminOnly, assignGroupsToTeacherSubject);
 
-/* ============================================================
- 📢 NOTICE MANAGEMENT
-============================================================ */
+//Notice management
 adminRouter.post("/notices", protect, adminOnly, createNotice);
 adminRouter.get("/notices", protect, adminOnly, getAllNotices);
 adminRouter.get("/notices/:id", protect, adminOnly, getNoticeById);

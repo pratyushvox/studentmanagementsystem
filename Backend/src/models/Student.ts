@@ -1,8 +1,37 @@
 import mongoose, { Schema, Document } from "mongoose";
 
+export interface IAssignmentRecord {
+  assignmentId: mongoose.Types.ObjectId;
+  marks?: number;
+  maxMarks: number;
+  submittedAt?: Date;
+  gradedAt?: Date;
+}
+
+export interface ISubjectRecord {
+  subjectId: mongoose.Types.ObjectId;
+  teacherId: mongoose.Types.ObjectId;
+  weeklyAssignments: IAssignmentRecord[];
+  mainAssignment?: IAssignmentRecord;
+  totalMarks?: number;
+  percentage?: number;
+  grade?: string;
+  passed: boolean;
+}
+
+export interface ISemesterRecord {
+  semester: number;
+  groupId: mongoose.Types.ObjectId;
+  subjects: ISubjectRecord[];
+  semesterPassed: boolean;
+  promotedAt?: Date;
+  promotedBy?: mongoose.Types.ObjectId;
+}
+
 export interface IStudent extends Document {
   userId: mongoose.Types.ObjectId;
   studentId: string;
+  fullName:string;
   currentSemester: number;
   groupId?: mongoose.Types.ObjectId;
   enrollmentYear: number;
@@ -25,41 +54,63 @@ export interface IStudent extends Document {
     email?: string;
   };
 
-  academicHistory: {
-    semester: number;
-    groupId: mongoose.Types.ObjectId;
-    subjects: {
-      subjectId: mongoose.Types.ObjectId;
-      teacherId: mongoose.Types.ObjectId;
-      weeklyAssignments: {
-        assignmentId: mongoose.Types.ObjectId;
-        marks?: number;
-        maxMarks: number;
-        submittedAt?: Date;
-        gradedAt?: Date;
-      }[];
-      mainAssignment?: {
-        assignmentId: mongoose.Types.ObjectId;
-        marks?: number;
-        maxMarks: number;
-        submittedAt?: Date;
-        gradedAt?: Date;
-      };
-      totalMarks?: number;
-      percentage?: number;
-      grade?: string;
-      passed: boolean;
-    }[];
-    semesterPassed: boolean;
-    promotedAt?: Date;
-    promotedBy?: mongoose.Types.ObjectId;
-  }[];
+  academicHistory: ISemesterRecord[];
 }
+
+/* =======================
+   SUB-SCHEMAS
+======================= */
+
+// Assignment Subdocument
+const assignmentSchema = new Schema<IAssignmentRecord>(
+  {
+    assignmentId: { type: Schema.Types.ObjectId, ref: "Assignment", required: true },
+    marks: { type: Number, default: 0 },
+    maxMarks: { type: Number, required: true },
+    submittedAt: Date,
+    gradedAt: Date,
+  },
+  { _id: false }
+);
+
+// Subject Subdocument
+const subjectSchema = new Schema<ISubjectRecord>(
+  {
+    subjectId: { type: Schema.Types.ObjectId, ref: "Subject", required: true },
+    teacherId: { type: Schema.Types.ObjectId, ref: "Teacher", required: true },
+    weeklyAssignments: { type: [assignmentSchema], default: [] },
+    mainAssignment: { type: assignmentSchema, default: null },
+    totalMarks: { type: Number, default: 0 },
+    percentage: { type: Number, default: 0 },
+    grade: { type: String, default: "" },
+    passed: { type: Boolean, default: false },
+  },
+  { _id: false }
+);
+
+// Semester Subdocument
+const semesterSchema = new Schema<ISemesterRecord>(
+  {
+    semester: { type: Number, required: true },
+    groupId: { type: Schema.Types.ObjectId, ref: "Group", required: true },
+    subjects: { type: [subjectSchema], default: [] },
+    semesterPassed: { type: Boolean, default: false },
+    promotedAt: Date,
+    promotedBy: { type: Schema.Types.ObjectId, ref: "User" },
+  },
+  { _id: false }
+);
+
+/* =======================
+   MAIN STUDENT SCHEMA
+======================= */
 
 const studentSchema = new Schema<IStudent>(
   {
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     studentId: { type: String, required: true, unique: true },
+    fullName: { type: String, required: true },
+    
     currentSemester: { type: Number, min: 1, max: 8, default: 1 },
     groupId: { type: Schema.Types.ObjectId, ref: "Group" },
     enrollmentYear: { type: Number, required: true },
@@ -75,60 +126,18 @@ const studentSchema = new Schema<IStudent>(
     profilePhoto: String,
 
     address: {
-      city: { type: String },
-      province: { type: String },
+      city: String,
+      province: String,
     },
 
     guardian: {
-      name: { type: String },
-      relationship: { type: String },
-      phoneNumber: { type: String },
-      email: { type: String },
+      name: String,
+      relationship: String,
+      phoneNumber: String,
+      email: String,
     },
 
-    academicHistory: [
-      {
-        semester: { type: Number, required: true },
-        groupId: { type: Schema.Types.ObjectId, ref: "Group", required: true },
-        subjects: [
-          {
-            subjectId: {
-              type: Schema.Types.ObjectId,
-              ref: "Subject",
-              required: true,
-            },
-            teacherId: {
-              type: Schema.Types.ObjectId,
-              ref: "Teacher",
-              required: true,
-            },
-            weeklyAssignments: [
-              {
-                assignmentId: { type: Schema.Types.ObjectId, ref: "Assignment" },
-                marks: Number,
-                maxMarks: { type: Number, required: true },
-                submittedAt: Date,
-                gradedAt: Date,
-              },
-            ],
-            mainAssignment: {
-              assignmentId: { type: Schema.Types.ObjectId, ref: "Assignment" },
-              marks: Number,
-              maxMarks: { type: Number, required: true },
-              submittedAt: Date,
-              gradedAt: Date,
-            },
-            totalMarks: Number,
-            percentage: Number,
-            grade: String,
-            passed: { type: Boolean, default: false },
-          },
-        ],
-        semesterPassed: { type: Boolean, default: false },
-        promotedAt: Date,
-        promotedBy: { type: Schema.Types.ObjectId, ref: "User" },
-      },
-    ],
+    academicHistory: { type: [semesterSchema], default: [] },
   },
   { timestamps: true }
 );
