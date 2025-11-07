@@ -26,6 +26,7 @@ import ConfirmDialog from "../../components/Confirmationdialogue";
 import UserFormModal from "../../components/Userformmodal";
 import StatsCard from "../../components/Cardstats";
 import PromotionModal from "../../components/PromotionModal";
+import ProfileCard from "../../components/ProfileCard"; // Add this import
 import { LoadingSpinner, ErrorDisplay } from "../../components/Loadingerror";
 import { useApiGet, useApiPost, useApiPut, useApiPatch, useApiDelete } from "../../hooks/useApi";
 import { toast } from 'react-toastify';
@@ -40,7 +41,9 @@ export default function AdminStudents() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAssignGroupModal, setShowAssignGroupModal] = useState(false);
   const [showPromotionModal, setShowPromotionModal] = useState(false);
+  const [showProfileCard, setShowProfileCard] = useState(false); // Add this state
   const [selectedStudent, setSelectedStudent] = useState(null);
+  const [selectedStudentDetails, setSelectedStudentDetails] = useState(null); // For profile card
   const [filteredStudents, setFilteredStudents] = useState([]);
   const [selectedSemester, setSelectedSemester] = useState("1");
   const [promotionResults, setPromotionResults] = useState(null);
@@ -269,6 +272,53 @@ export default function AdminStudents() {
     setFilteredStudents(filtered);
   }, [students, searchTerm, filterSemester, filterStatus]);
 
+  // Add Profile Card handlers
+  const handleStudentNameClick = (student: any) => {
+    // Prepare student data for ProfileCard
+    const studentProfileData = {
+      _id: student._id,
+      studentId: student.studentId,
+      fullName: student.fullName,
+      email: student.email,
+      phoneNumber: student.phoneNumber,
+      dateOfBirth: student.dateOfBirth,
+      bio: student.bio,
+      profilePhoto: student.profilePhoto,
+      currentSemester: student.semester,
+      enrollmentYear: student.enrollmentYear,
+      status: student.status,
+      address: student.address,
+      guardian: student.guardian,
+      group: student.groupId ? {
+        _id: student.groupId,
+        name: student.groupName,
+        semester: student.groupSemester
+      } : undefined,
+      academicHistory: student.academicHistory
+    };
+
+    setSelectedStudentDetails(studentProfileData);
+    setShowProfileCard(true);
+  };
+
+  const handleContactStudent = (studentId: string) => {
+    console.log('Contact student:', studentId);
+    // Implement contact logic here
+    setShowProfileCard(false);
+  };
+
+  const handleViewAssignments = (studentId: string) => {
+    console.log('View assignments for student:', studentId);
+    // Navigate to assignments page or open assignments modal
+    setShowProfileCard(false);
+  };
+
+  const handleViewFullProfile = (studentId: string) => {
+    console.log('View full profile for student:', studentId);
+    // Navigate to full profile page
+    setShowProfileCard(false);
+  };
+
   // Handlers
   const handleAddStudent = async (e: { preventDefault: () => void; }) => {
     e.preventDefault();
@@ -382,12 +432,15 @@ export default function AdminStudents() {
       header: "Student",
       accessor: "fullName",
       cell: (row) => (
-        <div className="flex items-center">
+        <div 
+          className="flex items-center cursor-pointer hover:bg-gray-50 p-2 rounded-lg transition-colors"
+          onClick={() => handleStudentNameClick(row)}
+        >
           <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-semibold">
             {row.fullName?.charAt(0).toUpperCase()}
           </div>
           <div className="ml-4">
-            <div className="text-sm font-medium text-gray-900">
+            <div className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors">
               {row.fullName}
             </div>
             <div className="text-xs text-gray-500">
@@ -848,6 +901,20 @@ export default function AdminStudents() {
         onPromoteSemester={handlePromoteSemester}
         onManualPromotion={handleManualPromotion}
       />
+
+      {/* Student Profile Card Modal */}
+      {showProfileCard && selectedStudentDetails && (
+        <ProfileCard
+          user={selectedStudentDetails}
+          role="student"
+          isOpen={showProfileCard}
+          onClose={() => setShowProfileCard(false)}
+          showActions={true}
+          onContact={handleContactStudent}
+          onViewAssignments={handleViewAssignments}
+          onViewProfile={handleViewFullProfile}
+        />
+      )}
     </div>
   );
 }

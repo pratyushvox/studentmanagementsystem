@@ -20,6 +20,7 @@ import ConfirmDialog from "../../components/Confirmationdialogue";
 import UserFormModal from "../../components/Userformmodal";
 import StatsCard from "../../components/Cardstats";
 import TeacherSubjectsModal from "../../components/Teachersubjectmodal";
+import ProfileCard from "../../components/ProfileCard"; // Add this import
 import { LoadingSpinner, ErrorDisplay } from "../../components/Loadingerror";
 import { useApiGet, useApiPost, useApiPut, useApiDelete } from "../../hooks/useApi";
 import { toast } from 'react-toastify';
@@ -64,9 +65,11 @@ export default function AdminTeachers() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showSubjectsModal, setShowSubjectsModal] = useState(false);
+  const [showProfileCard, setShowProfileCard] = useState(false); // Add this state
   const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null);
   const [teacherDetails, setTeacherDetails] = useState<TeacherDetails | null>(null);
   const [teacherSubjects, setTeacherSubjects] = useState<any[]>([]);
+  const [selectedTeacherDetails, setSelectedTeacherDetails] = useState(null); // For profile card
   
   const [confirmDialog, setConfirmDialog] = useState({
     isOpen: false,
@@ -145,6 +148,57 @@ export default function AdminTeachers() {
 
   // Get unique departments from teachers data for the filter dropdown
   const departments = Array.from(new Set(teachers.map(teacher => teacher.department).filter(Boolean))) as string[];
+
+  // Add Profile Card handlers
+  const handleTeacherNameClick = async (teacher: Teacher) => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(`http://localhost:5000/api/admin/teachers/${teacher._id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await response.json();
+      
+      // Prepare teacher data for ProfileCard
+      const teacherProfileData = {
+        _id: teacher._id,
+        teacherId: teacher.teacherId,
+        fullName: teacher.fullName,
+        email: teacher.email,
+        phoneNumber: teacher.phoneNumber,
+        dateOfBirth: teacher.dateOfBirth,
+        bio: teacher.bio,
+        profilePhoto: teacher.profilePhoto,
+        department: teacher.department,
+        specialization: teacher.specialization,
+        isModuleLeader: teacher.isModuleLeader,
+        assignedSubjects: data.teacher?.assignedSubjects || [],
+        moduleLeaderSubjects: teacher.moduleLeaderSubjects || []
+      };
+
+      setSelectedTeacherDetails(teacherProfileData);
+      setShowProfileCard(true);
+    } catch (err: any) {
+      toast.error("Failed to load teacher details");
+    }
+  };
+
+  const handleContactTeacher = (teacherId: string) => {
+    console.log('Contact teacher:', teacherId);
+    // Implement contact logic here
+    setShowProfileCard(false);
+  };
+
+  const handleViewAssignments = (teacherId: string) => {
+    console.log('View assignments for teacher:', teacherId);
+    // Navigate to assignments page or open assignments modal
+    setShowProfileCard(false);
+  };
+
+  const handleViewFullProfile = (teacherId: string) => {
+    console.log('View full profile for teacher:', teacherId);
+    // Navigate to full profile page
+    setShowProfileCard(false);
+  };
 
   // Define form fields
   const teacherAddFields = [
@@ -305,12 +359,15 @@ export default function AdminTeachers() {
       header: "Teacher",
       accessor: "fullName",
       cell: (row) => (
-        <div className="flex items-center gap-3">
+        <div 
+          className="flex items-center gap-3 cursor-pointer hover:bg-gray-50 p-2 rounded-lg transition-colors"
+          onClick={() => handleTeacherNameClick(row)}
+        >
           <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white font-semibold shadow-md">
             {row.fullName?.charAt(0).toUpperCase()}
           </div>
           <div>
-            <div className="text-sm font-medium text-gray-900">
+            <div className="text-sm font-medium text-gray-900 hover:text-purple-600 transition-colors">
               {row.fullName}
             </div>
             <div className="text-xs text-gray-500">
@@ -464,7 +521,7 @@ export default function AdminTeachers() {
               <div className="mt-2 flex items-start gap-2 text-sm text-blue-700 bg-blue-50 px-3 py-2 rounded-lg border border-blue-200">
                 <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
                 <span>
-                  <strong>Note:</strong> Click on subjects to view detailed subject and group assignments
+                  <strong>Note:</strong> Click on teacher names to view detailed profiles, or on subjects to view subject and group assignments
                 </span>
               </div>
             </div>
@@ -624,6 +681,20 @@ export default function AdminTeachers() {
         }}
         subjects={teacherSubjects}
       />
+
+      {/* Teacher Profile Card Modal */}
+      {showProfileCard && selectedTeacherDetails && (
+        <ProfileCard
+          user={selectedTeacherDetails}
+          role="teacher"
+          isOpen={showProfileCard}
+          onClose={() => setShowProfileCard(false)}
+          showActions={true}
+          onContact={handleContactTeacher}
+          onViewAssignments={handleViewAssignments}
+          onViewProfile={handleViewFullProfile}
+        />
+      )}
     </div>
   );
 }
