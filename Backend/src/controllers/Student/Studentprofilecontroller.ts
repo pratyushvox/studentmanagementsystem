@@ -1,7 +1,10 @@
-// controllers/Student/studentProfileController.ts
+
 import { Request, Response } from "express";
+import bcrypt from "bcryptjs";
 import User from "../../models/User";
 import Student from "../../models/Student";
+import { uploadFileToCloudinary } from "../../utils/cloudinaryHelper";
+
 
 // ============================================================
 // COMPLETE PROFILE (First-Time Login Setup)
@@ -18,7 +21,7 @@ export const completeProfile = async (req: Request, res: Response) => {
       dateOfBirth,
       bio,
       address,
-      guardian // ✅ New field
+      guardian
     } = req.body;
 
     // Validate required fields
@@ -70,7 +73,7 @@ export const completeProfile = async (req: Request, res: Response) => {
     student.dateOfBirth = dateOfBirth ? new Date(dateOfBirth) : undefined;
     student.bio = bio;
     student.address = address;
-    student.guardian = guardian; // ✅ Added guardian
+    student.guardian = guardian;
 
     await student.save();
 
@@ -89,7 +92,7 @@ export const completeProfile = async (req: Request, res: Response) => {
         dateOfBirth: student.dateOfBirth,
         bio: student.bio,
         address: student.address,
-        guardian: student.guardian, // ✅ Return guardian
+        guardian: student.guardian,
         status: student.status
       }
     });
@@ -101,6 +104,8 @@ export const completeProfile = async (req: Request, res: Response) => {
     });
   }
 };
+
+
 
 // ============================================================
 // GET STUDENT PROFILE (Detailed)
@@ -115,6 +120,7 @@ export const getStudentProfile = async (req: Request, res: Response) => {
       .populate("userId", "fullName email profileCompleted")
       .populate("academicHistory.groupId", "name semester")
       .populate("academicHistory.subjects.subjectId", "name code");
+     
 
     if (!student) {
       return res.status(404).json({ message: "Student profile not found" });
@@ -140,7 +146,7 @@ export const getStudentProfile = async (req: Request, res: Response) => {
 export const updateStudentProfile = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user._id;
-    const { phoneNumber, bio, address, profilePhoto, dateOfBirth, guardian } = req.body; // ✅ Include guardian
+    const { phoneNumber, bio, address, profilePhoto, dateOfBirth, guardian } = req.body;
 
     const student = await Student.findOne({ userId });
     if (!student) {
@@ -182,7 +188,76 @@ export const updateStudentProfile = async (req: Request, res: Response) => {
   }
 };
 
+// ============================================================
+// UPDATE STUDENT PASSWORD
+// ============================================================
 
+export const updateStudentPassword = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user._id;
+    const { currentPassword, newPassword, confirmPassword } = req.body;
+
+    // Validate required fields
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      return res.status(400).json({ 
+        message: "Current password, new password, and confirm password are required" 
+      });
+    }
+
+    // Check if new passwords match
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({ 
+        message: "New password and confirm password do not match" 
+      });
+    }
+
+    // Validate password strength
+    if (newPassword.length < 6) {
+      return res.status(400).json({ 
+        message: "New password must be at least 6 characters long" 
+      });
+    }
+
+    // Find user
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Verify current password
+    const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password);
+    if (!isCurrentPasswordValid) {
+      return res.status(401).json({ 
+        message: "Current password is incorrect" 
+      });
+    }
+
+    // Check if new password is same as current password
+    const isSamePassword = await bcrypt.compare(newPassword, user.password);
+    if (isSamePassword) {
+      return res.status(400).json({ 
+        message: "New password cannot be the same as current password" 
+      });
+    }
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // Update password
+    user.password = hashedPassword;
+    await user.save();
+
+    res.status(200).json({
+      message: "Password updated successfully"
+    });
+  } catch (error: any) {
+    console.error("Error updating password:", error);
+    res.status(500).json({ 
+      message: "Failed to update password", 
+      error: error.message 
+    });
+  }
+};
 
 // ============================================================
 // GET ACADEMIC HISTORY
@@ -213,6 +288,41 @@ export const getAcademicHistory = async (req: Request, res: Response) => {
     res.status(500).json({ 
       message: "Failed to fetch academic history", 
       error: error.message 
+    });
+  }
+};
+
+// upload propfie picture 
+export const uploadProfilePhoto = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user._id;
+
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded" });
+    }
+
+    // Find student
+    const student = await Student.findOne({ userId });
+    if (!student) {
+      return res.status(404).json({ message: "Student profile not found" });
+    }
+
+    // Upload to Cloudinary using your helper
+    const fileUrl = await uploadFileToCloudinary(req.file.path, "student_profile_photos");
+
+    // Update student profile
+    student.profilePhoto = fileUrl;
+    await student.save();
+
+    res.status(200).json({
+      message: "Profile photo uploaded successfully",
+      profilePhoto: student.profilePhoto,
+    });
+  } catch (error: any) {
+    console.error("Error uploading profile photo:", error);
+    res.status(500).json({
+      message: "Failed to upload profile photo",
+      error: error.message,
     });
   }
 };

@@ -19,12 +19,12 @@ const Navbar: React.FC<NavbarProps> = ({ onProfileClick }) => {
   // Fetch user profile data
   const { data: studentProfile, refetch: fetchStudentProfile } = useApiGet(
     "/student/profile",
-    { autoFetch: false }
+    { autoFetch: true }
   );
 
   const { data: teacherProfile, refetch: fetchTeacherProfile } = useApiGet(
     "/teacher/profile",
-    { autoFetch: false }
+    { autoFetch: true }
   );
 
   useEffect(() => {
@@ -167,9 +167,20 @@ const Navbar: React.FC<NavbarProps> = ({ onProfileClick }) => {
                   onClick={() => setShowProfileMenu(!showProfileMenu)}
                   className="flex items-center gap-3 p-2 hover:bg-gray-100 rounded-lg transition-colors"
                 >
-                  <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-semibold">
-                    {fullName.charAt(0).toUpperCase()}
-                  </div>
+                  <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-200 flex items-center justify-center">
+  {profileData?.profilePhoto ? (
+    <img
+      src={profileData.profilePhoto}
+      alt="Profile"
+      className="w-full h-full object-cover"
+    />
+  ) : (
+    <span className="text-white font-semibold bg-gradient-to-br from-blue-500 to-purple-500 w-full h-full flex items-center justify-center">
+      {fullName.charAt(0).toUpperCase()}
+    </span>
+  )}
+</div>
+
                   <div className="hidden sm:block text-left">
                     <p className="text-sm font-semibold text-gray-700">{fullName}</p>
                     <p className="text-xs text-gray-500 capitalize">{role}</p>

@@ -9,8 +9,11 @@ import { getTeacherDashboard } from "../controllers/Teacher/dashboardController"
 // Profile & Workload
 import {
   getTeacherProfile,
+  updateMyProfile,
+  uploadProfilePhoto,
   getMyWorkload,
-  getMySubjects
+  getMySubjects,
+  updateTeacherPassword
 } from "../controllers/Teacher/Teacherprofilecontroller.js";
 
 // Assignment Management
@@ -83,6 +86,14 @@ router.get("/dashboard", protect, teacherOnly, getTeacherDashboard);
 ============================================================ */
 // Get logged-in teacher's full profile with subjects & groups
 router.get("/profile", protect, teacherOnly, getTeacherProfile);
+
+// Update teacher's own profile (basic details)
+router.put("/profile/update", protect, teacherOnly, updateMyProfile);
+
+router.put("password/update",protect,teacherOnly,updateTeacherPassword)
+
+// Upload profile photo
+router.post("/profile/upload-photo", protect, teacherOnly, upload.single("profilePhoto"), uploadProfilePhoto);
 
 // Get teacher's workload statistics
 router.get("/workload", protect, teacherOnly, getMyWorkload);

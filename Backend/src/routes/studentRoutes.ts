@@ -2,13 +2,15 @@
 import express from "express";
 import { protect } from "../middleware/authMiddleware";
 import { upload } from "../middleware/uploadMiddleware";
+import  {uploadProfilePhoto}  from "../controllers/Student/Studentprofilecontroller.js"
 
 // Profile Management
 import { 
   completeProfile, 
   getStudentProfile, 
   updateStudentProfile,
-  checkProfileStatus
+  checkProfileStatus,
+  updateStudentPassword
 } from "../controllers/Student/Studentprofilecontroller";
 
 // Dashboard
@@ -39,7 +41,7 @@ import {
 
 import { getStudentNotices } from "../controllers/Student/noticeController";
 
-// Attendance - ADD THESE IMPORTS
+// Attendance
 import {
   getStudentAttendanceSummary,
   getStudentAttendanceRecords,
@@ -56,6 +58,15 @@ router.post("/complete-profile", protect, completeProfile);
 router.get("/profile", protect, getStudentProfile);
 router.put("/profile", protect, updateStudentProfile);
 router.get("/profile-status", protect, checkProfileStatus);
+router.put("/password/update",protect,updateStudentPassword)
+
+// ✅ Upload profile photo
+router.post(
+  "/profile/photo",
+  protect,
+  upload.single("profilePhoto"), // Multer handles the file
+  uploadProfilePhoto
+);
 
 // ============================================================
 // DASHBOARD
@@ -101,7 +112,7 @@ router.get("/posts/:postId", protect, getPostById);
 router.get("/notice", protect, getStudentNotices);
 
 // ============================================================
-// ATTENDANCE - ADD THESE NEW ROUTES
+// ATTENDANCE
 // ============================================================
 router.get("/attendance/summary", protect, getStudentAttendanceSummary);
 router.get("/attendance/records", protect, getStudentAttendanceRecords);

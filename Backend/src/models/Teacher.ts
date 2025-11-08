@@ -7,13 +7,14 @@ export interface ITeacher extends Document {
   email: string;
   department?: string;
   specialization?: string;
-  isModuleLeader: boolean; // Flag to identify if teacher is a module leader
-  moduleLeaderSubjects: mongoose.Types.ObjectId[]; // Subjects they lead
+  isModuleLeader: boolean;
+  moduleLeaderSubjects: mongoose.Types.ObjectId[];
   assignedSubjects: {
     subjectId: mongoose.Types.ObjectId;
     semester: number;
     groups: mongoose.Types.ObjectId[];
   }[];
+  profilePhoto?: string; 
 }
 
 const teacherSchema = new Schema<ITeacher>(
@@ -33,7 +34,8 @@ const teacherSchema = new Schema<ITeacher>(
       subjectId: { type: Schema.Types.ObjectId, ref: "Subject", required: true },
       semester: { type: Number, required: true },
       groups: [{ type: Schema.Types.ObjectId, ref: "Group" }]
-    }]
+    }],
+    profilePhoto: { type: String }, 
   },
   { timestamps: true }
 );
