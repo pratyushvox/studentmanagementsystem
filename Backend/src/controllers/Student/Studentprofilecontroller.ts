@@ -1,9 +1,9 @@
 
 import { Request, Response } from "express";
 import bcrypt from "bcryptjs";
-import User from "../../models/User";
-import Student from "../../models/Student";
-import { uploadFileToCloudinary } from "../../utils/cloudinaryHelper";
+import User from "../../models/User.js";
+import Student from "../../models/Student.js";
+import { uploadFileToCloudinary } from "../../utils/cloudinaryHelper.js";
 
 
 // ============================================================

@@ -29,6 +29,7 @@ import TeacherGradingDashboard from './pages/Teacher/Teachersubmission';
 import TeacherPostUpload from './pages/Teacher/TeacherLearningresources';
 import TeacherAttendancePage from './pages/Teacher/Teacherattendancepage';
 import TeacherEditProfilePage from './pages/Teacher/Teachereditprofilepage';
+import TeacherChat from './pages/Teacher/Teacherchat';
 
 //admin
 import AdminDashboardPage from './pages/Admin/Admindashboard';
@@ -211,6 +212,15 @@ function App() {
             element={
               <ProtectedRoute role="teacher">
                 <TeacherEditProfilePage />
+              </ProtectedRoute>
+            }
+          />
+
+           <Route
+            path="/teacher/chat"
+            element={
+              <ProtectedRoute role="teacher">
+                <TeacherChat />
               </ProtectedRoute>
             }
           />

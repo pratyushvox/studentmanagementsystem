@@ -14,7 +14,7 @@ import {
   getMyWorkload,
   getMySubjects,
   updateTeacherPassword
-} from "../controllers/Teacher/Teacherprofilecontroller.js";
+} from "../controllers/Teacher/Teacherprofilecontroller";
 
 // Assignment Management
 import {
@@ -68,13 +68,23 @@ import {
   getGroupStudents,
   getMyGroupsWithDetails,
   getStudentDetails
-} from "../controllers/Teacher/Teachergroupcontroller.js";
+} from "../controllers/Teacher/Teachergroupcontroller";
+
+// Student Information
+import {
+  getMyStudents
+} from "../controllers/Teacher/Studentcontroller";
+
+// Chat
+import {
+  createChat,
+  getChats,
+  sendMessage,
+  getMessages,
+  getChatParticipant
+} from "../controllers/Teacher/chatcontroller";
 
 const router = express.Router();
-
-
-
-
 
 /* ============================================================
  📊 DASHBOARD
@@ -90,7 +100,7 @@ router.get("/profile", protect, teacherOnly, getTeacherProfile);
 // Update teacher's own profile (basic details)
 router.put("/profile/update", protect, teacherOnly, updateMyProfile);
 
-router.put("password/update",protect,teacherOnly,updateTeacherPassword)
+router.put("/password/update", protect, teacherOnly, updateTeacherPassword)
 
 // Upload profile photo
 router.post("/profile/upload-photo", protect, teacherOnly, upload.single("profilePhoto"), uploadProfilePhoto);
@@ -112,6 +122,15 @@ router.get("/groups/my-groups/detailed", protect, teacherOnly, getMyGroupsWithDe
 
 // Get specific student details (only if student is in teacher's assigned group)
 router.get("/groups/students/:studentId", protect, teacherOnly, getStudentDetails);
+
+/* ============================================================
+ 👨‍🎓 STUDENT INFORMATION
+============================================================ */
+// Get all students taught by the teacher
+router.get("/students", protect, teacherOnly, getMyStudents);
+
+// Get detailed information for a specific student
+router.get("/students/:studentId", protect, teacherOnly, getStudentDetails);
 
 /* ============================================================
  📘 ASSIGNMENT MANAGEMENT
@@ -220,5 +239,23 @@ router.get("/analytics/student-performance", protect, teacherOnly, getStudentPer
 
 // Get recent activity feed for dashboard
 router.get("/analytics/recent-activity", protect, teacherOnly, getRecentActivity);
+
+/* ============================================================
+ 💬 CHAT
+============================================================ */
+// Create or fetch chat
+router.post("/chat", protect, teacherOnly, createChat);
+
+// Get all chats for teacher
+router.get("/chat/:teacherId", protect, teacherOnly, getChats);
+
+// Get messages for a chat
+router.get("/chat/messages/:chatId", protect, teacherOnly, getMessages);
+
+// Send message
+router.post("/chat/send", protect, teacherOnly, sendMessage);
+
+// Get other participant of chat
+router.get("/chat/participant/:chatId/:teacherId", protect, teacherOnly, getChatParticipant)
 
 export default router;

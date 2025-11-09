@@ -2,7 +2,7 @@
 import express from "express";
 import { protect } from "../middleware/authMiddleware";
 import { upload } from "../middleware/uploadMiddleware";
-import  {uploadProfilePhoto}  from "../controllers/Student/Studentprofilecontroller.js"
+import  {uploadProfilePhoto}  from "../controllers/Student/studentprofilecontroller.js"
 
 // Profile Management
 import { 
@@ -48,6 +48,16 @@ import {
   getStudentSubjectAttendance,
   getStudentSubjects
 } from "../controllers/Student/studentattendancecontroller";
+
+//chat
+
+import {
+  createChat as createStudentChat,
+  getChats as getStudentChats,
+  getMessages as getStudentMessages,
+  sendMessage as sendStudentMessage,
+  getChatParticipant as getStudentChatParticipant
+} from "../controllers/Student/chatcontroller";
 
 const router = express.Router();
 
@@ -118,5 +128,14 @@ router.get("/attendance/summary", protect, getStudentAttendanceSummary);
 router.get("/attendance/records", protect, getStudentAttendanceRecords);
 router.get("/attendance/subject/:subjectId", protect, getStudentSubjectAttendance);
 router.get("/attendance/subjects", protect, getStudentSubjects);
+
+
+//chat 
+router.post("/chat", protect, createStudentChat);
+router.get("/chat/:studentId", protect, getStudentChats);
+router.get("/chat/messages/:chatId", protect, getStudentMessages);
+router.post("/chat/message", protect, sendStudentMessage);
+router.get("/chat/participant/:chatId/:userId", protect, getStudentChatParticipant);
+
 
 export default router;

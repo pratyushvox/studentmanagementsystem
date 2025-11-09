@@ -46,6 +46,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     { id: "learning Resource", label: "learning Resource", icon: BarChart3, path: "/teacher/learningresource" },
     { id: "attendance", label: "Attendance", icon: Calendar, path: "/teacher/attendance" },
     { id: "editprofile", label: "Editprofile", icon: Settings, path: "/teacher/editprofile" },
+    { id: "chat", label: "Chat", icon: Settings, path: "/teacher/chat" },
   ];
 
   // Admin Menu with paths
