@@ -19,6 +19,7 @@ import StudentAssignmentsPage from './pages/Student/Studentassingment';
 import ProfileSetup from './pages/Student/Studentprofilepage';
 import StudentAttendancePage from './pages/Student/Studentattendancepage';
 import StudentEditProfilePage from './pages/Student/studentEditprofile';
+import StudentChat from './pages/Student/Studentchat';
 
 
 // teacher 
@@ -114,6 +115,16 @@ function App() {
               </ProtectedRoute>
             }
           />
+           <Route
+            path="/student/chat"
+            element={
+              <ProtectedRoute role="student">
+                <StudentChat />
+              </ProtectedRoute>
+            }
+          />
+
+          
 
 
           <Route

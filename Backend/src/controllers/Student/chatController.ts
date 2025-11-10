@@ -3,7 +3,7 @@ import { Request, Response } from "express";
 import Chat from "../../models/Chat";
 import Teacher from "../../models/Teacher";
 import Student from "../../models/Student";
-import { getIO } from "../../Utils/IO";
+import { getIO } from "../../utils/io";
 
 // Helper: Populate participant details
 const populateParticipant = async (participant: any) => {

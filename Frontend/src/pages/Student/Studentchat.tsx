@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+// components/StudentChat.tsx
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { 
   Search, 
   Users, 
@@ -6,7 +7,7 @@ import {
   Send, 
   Loader,
   AlertCircle,
-  Circle
+  BookOpen
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useApiGet, useApiPost } from '../../hooks/useApi';
@@ -15,14 +16,20 @@ import Sidebar from '../../components/Sidebar';
 import { io, Socket } from 'socket.io-client';
 
 // Types
-interface Student {
+interface Teacher {
   _id: string;
-  studentId: string;
+  teacherId: string;
   fullName: string;
   email: string;
-  currentSemester: number;
+  department?: string;
+  specialization?: string;
+  isModuleLeader: boolean;
   profilePhoto?: string;
-  groupName?: string;
+  subjects: Array<{
+    _id: string;
+    name: string;
+    code: string;
+  }>;
 }
 
 interface Message {
@@ -42,117 +49,73 @@ interface Chat {
     model: 'Teacher' | 'Student';
   }>;
   messages: Message[];
-  otherParticipant?: Student;
+  otherParticipant?: Teacher;
   lastMessage?: Message;
   unreadCount: number;
 }
 
-const TeacherChat = () => {
-  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+const StudentChat = () => {
+  const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null);
   const [activeChat, setActiveChat] = useState<Chat | null>(null);
   const [messageInput, setMessageInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [semesterFilter, setSemesterFilter] = useState('');
+  const [departmentFilter, setDepartmentFilter] = useState('');
   const [isLoadingChat, setIsLoadingChat] = useState(false);
   const [isSocketConnected, setIsSocketConnected] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const socketRef = useRef<Socket | null>(null);
 
-  // Get teacher profile first to get teacher ID
+  // Get student profile first to get student ID
   const { 
-    data: teacherProfile, 
+    data: studentProfile, 
     loading: loadingProfile,
     error: profileError
-  } = useApiGet('/teacher/profile', { 
+  } = useApiGet('/student/profile', { 
     autoFetch: true 
   });
 
-  // Get teacher ID from profile
-  const teacherId = teacherProfile?.teacher?._id;
+  // Get student ID from profile
+  const studentId = studentProfile?.student?._id;
 
-  // Fetch teacher's students
+  // Fetch available departments
   const { 
-    data: studentsResponse, 
-    loading: loadingStudents,
-    error: studentsError,
-    refetch: refetchStudents
-  } = useApiGet('/teacher/students', { 
-    autoFetch: !!teacherId 
+    data: departmentsResponse,
+    loading: loadingDepartments
+  } = useApiGet('/student/teachers/departments', {
+    autoFetch: !!studentId
   });
 
-  // Fetch teacher's chats - ONLY when teacherId is available
+  // Fetch student's teachers - ONLY when studentId is available
+  const { 
+    data: teachersResponse, 
+    loading: loadingTeachers,
+    error: teachersError,
+    refetch: refetchTeachers
+  } = useApiGet('/student/teachers', { 
+    autoFetch: !!studentId 
+  });
+
+  // Fetch student's chats - ONLY when studentId is available
   const { 
     data: chatsResponse,
     loading: loadingChats,
     error: chatsError,
     refetch: refetchChats
-  } = useApiGet(teacherId ? `/teacher/chat/${teacherId}` : null, {
-    autoFetch: !!teacherId
+  } = useApiGet(studentId ? `/student/chat/${studentId}` : null, {
+    autoFetch: !!studentId
   });
 
   // API hooks
   const { post: createChat, loading: creatingChat } = useApiPost();
   const { post: sendMessage, loading: sendingMessage } = useApiPost();
 
-  const students = studentsResponse?.students || [];
+  const teachers = teachersResponse?.teachers || [];
+  const departments = departmentsResponse?.departments || [];
   const chats = chatsResponse || [];
-
-  // Get students with their chat info and unread counts
-  const studentsWithChatInfo = useMemo(() => {
-    return students.map((student: Student) => {
-      // Find the chat for this student
-      const studentChat = Array.isArray(chats) ? chats.find((chat: Chat) => 
-        chat.participants?.some(
-          (p: any) => p.model === 'Student' && p.item === student._id
-        )
-      ) : null;
-
-      return {
-        ...student,
-        chat: studentChat,
-        unreadCount: studentChat?.unreadCount || 0,
-        lastMessage: studentChat?.lastMessage,
-        hasUnread: (studentChat?.unreadCount || 0) > 0
-      };
-    });
-  }, [students, chats]);
-
-  // Sort students: unread messages first, then by last message time
-  const sortedStudents = useMemo(() => {
-    return [...studentsWithChatInfo].sort((a, b) => {
-      // First sort by unread count (descending)
-      if (a.unreadCount > b.unreadCount) return -1;
-      if (a.unreadCount < b.unreadCount) return 1;
-      
-      // Then sort by last message time (most recent first)
-      if (a.lastMessage && b.lastMessage) {
-        return new Date(b.lastMessage.createdAt).getTime() - new Date(a.lastMessage.createdAt).getTime();
-      }
-      if (a.lastMessage) return -1;
-      if (b.lastMessage) return 1;
-      
-      // Finally sort by name
-      return a.fullName.localeCompare(b.fullName);
-    });
-  }, [studentsWithChatInfo]);
-
-  // Filter students based on search and semester
-  const filteredStudents = useMemo(() => {
-    return sortedStudents.filter((student) => {
-      const matchesSearch = searchTerm === '' || 
-        student.fullName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        student.studentId?.toLowerCase().includes(searchTerm.toLowerCase());
-      
-      const matchesSemester = semesterFilter === '' || 
-        student.currentSemester?.toString() === semesterFilter;
-      
-      return matchesSearch && matchesSemester;
-    });
-  }, [sortedStudents, searchTerm, semesterFilter]);
 
   // Initialize Socket.IO connection - FIXED VERSION
   useEffect(() => {
-    if (!teacherId) return;
+    if (!studentId) return;
 
     // Create socket connection
     const newSocket = io('http://localhost:5000', {
@@ -169,8 +132,8 @@ const TeacherChat = () => {
       console.log('✅ Connected to chat server');
       setIsSocketConnected(true);
       
-      // Join teacher's room after connection is established
-      newSocket.emit('join', { role: 'teacher', userId: teacherId });
+      // Join student's room after connection is established
+      newSocket.emit('join', { role: 'student', userId: studentId });
     });
 
     newSocket.on('disconnect', (reason) => {
@@ -214,7 +177,7 @@ const TeacherChat = () => {
       }
       setIsSocketConnected(false);
     };
-  }, [teacherId]); // Only depend on teacherId
+  }, [studentId]); // Only depend on studentId
 
   // Update active chat when socket receives messages
   useEffect(() => {
@@ -242,32 +205,36 @@ const TeacherChat = () => {
   useEffect(() => {
     if (profileError) {
       console.error('Profile error:', profileError);
-      toast.error('Failed to load teacher profile');
+      toast.error('Failed to load student profile');
     }
-    if (studentsError) {
-      console.error('Students error:', studentsError);
-      toast.error('Failed to load students');
+    if (teachersError) {
+      console.error('Teachers error:', teachersError);
+      toast.error('Failed to load teachers');
     }
     if (chatsError) {
       console.error('Chats error:', chatsError);
       toast.error('Failed to load chats');
     }
-  }, [profileError, studentsError, chatsError]);
+  }, [profileError, teachersError, chatsError]);
 
-  // Get available semesters from students
-  const availableSemesters = useMemo(() => {
-    const semesters = new Set<number>();
-    students.forEach((student: Student) => {
-      if (student.currentSemester) {
-        semesters.add(student.currentSemester);
-      }
+  // Filter teachers based on search and department
+  const filteredTeachers = useMemo(() => {
+    return teachers.filter((teacher: Teacher) => {
+      const matchesSearch = searchTerm === '' || 
+        teacher.fullName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        teacher.teacherId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        teacher.department?.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      const matchesDepartment = departmentFilter === '' || 
+        teacher.department === departmentFilter;
+      
+      return matchesSearch && matchesDepartment;
     });
-    return Array.from(semesters).sort();
-  }, [students]);
+  }, [teachers, searchTerm, departmentFilter]);
 
-  // Find or create chat when student is selected
+  // Find or create chat when teacher is selected
   useEffect(() => {
-    if (!selectedStudent || !teacherId) return;
+    if (!selectedTeacher || !studentId) return;
 
     const findOrCreateChat = async () => {
       setIsLoadingChat(true);
@@ -278,7 +245,7 @@ const TeacherChat = () => {
         if (Array.isArray(chats)) {
           existingChat = chats.find((chat: Chat) => 
             chat.participants?.some(
-              (p: any) => p.model === 'Student' && p.item === selectedStudent._id
+              (p: any) => p.model === 'Teacher' && p.item === selectedTeacher._id
             )
           ) || null;
         }
@@ -287,10 +254,10 @@ const TeacherChat = () => {
           setActiveChat(existingChat);
         } else {
           // Create new chat
-          const result = await createChat('/teacher/chat', {
+          const result = await createChat('/student/chat', {
             participants: [
-              { item: teacherId, model: 'Teacher' },
-              { item: selectedStudent._id, model: 'Student' }
+              { item: studentId, model: 'Student' },
+              { item: selectedTeacher._id, model: 'Teacher' }
             ]
           });
           
@@ -308,7 +275,7 @@ const TeacherChat = () => {
     };
 
     findOrCreateChat();
-  }, [selectedStudent, chats, createChat, refetchChats, teacherId]);
+  }, [selectedTeacher, chats, createChat, refetchChats, studentId]);
 
   // Scroll to bottom of messages
   useEffect(() => {
@@ -316,12 +283,12 @@ const TeacherChat = () => {
   }, [activeChat?.messages]);
 
   const handleSendMessage = async () => {
-    if (!messageInput.trim() || !activeChat || !teacherId) return;
+    if (!messageInput.trim() || !activeChat || !studentId) return;
 
     try {
-      const result = await sendMessage('/teacher/chat/send', {
+      const result = await sendMessage('/student/chat/message', {
         chatId: activeChat._id,
-        sender: teacherId,
+        sender: studentId,
         content: messageInput.trim()
       });
 
@@ -358,20 +325,6 @@ const TeacherChat = () => {
     });
   };
 
-  const formatLastMessageTime = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
-    
-    if (diffInHours < 24) {
-      return formatTime(dateString);
-    } else if (diffInHours < 48) {
-      return 'Yesterday';
-    } else {
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    }
-  };
-
   const getInitials = (name: string) => {
     return name
       .split(' ')
@@ -382,15 +335,15 @@ const TeacherChat = () => {
   };
 
   // Show loading state while fetching profile
-  if (loadingProfile || !teacherId) {
+  if (loadingProfile || !studentId) {
     return (
       <>
         <Navbar />
-        <Sidebar userRole="teacher" activeItem="chat" />
+        <Sidebar userRole="student" activeItem="chat" />
         <div className="ml-64 mt-16 min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
           <div className="text-center">
             <Loader className="animate-spin mx-auto mb-4 text-blue-600" size={48} />
-            <p className="text-gray-600">Loading teacher profile...</p>
+            <p className="text-gray-600">Loading student profile...</p>
           </div>
         </div>
       </>
@@ -402,7 +355,7 @@ const TeacherChat = () => {
     return (
       <>
         <Navbar />
-        <Sidebar userRole="teacher" activeItem="chat" />
+        <Sidebar userRole="student" activeItem="chat" />
         <div className="ml-64 mt-16 min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
           <div className="text-center bg-white p-8 rounded-2xl shadow-lg">
             <AlertCircle className="mx-auto mb-4 text-red-600" size={48} />
@@ -423,16 +376,16 @@ const TeacherChat = () => {
   return (
     <>
       <Navbar />
-      <Sidebar userRole="teacher" activeItem="chat" />
+      <Sidebar userRole="student" activeItem="chat" />
       
       <div className="ml-64 mt-16 min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
         <div className="flex h-[calc(100vh-4rem)]">
-          {/* Sidebar - Students List */}
+          {/* Sidebar - Teachers List */}
           <div className="w-80 bg-white border-r border-gray-200 flex flex-col">
             {/* Header */}
             <div className="p-4 border-b border-gray-200">
               <h1 className="text-xl font-bold text-gray-800">Messages</h1>
-              <p className="text-sm text-gray-600">Chat with your students</p>
+              <p className="text-sm text-gray-600">Chat with your teachers</p>
               <div className="flex items-center gap-2 mt-1">
                 <div className={`w-2 h-2 rounded-full ${isSocketConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
                 <span className={`text-xs ${isSocketConnected ? 'text-green-600' : 'text-red-600'}`}>
@@ -447,7 +400,7 @@ const TeacherChat = () => {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
                 <input
                   type="text"
-                  placeholder="Search students..."
+                  placeholder="Search teachers..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
@@ -455,79 +408,69 @@ const TeacherChat = () => {
               </div>
 
               <select
-                value={semesterFilter}
-                onChange={(e) => setSemesterFilter(e.target.value)}
+                value={departmentFilter}
+                onChange={(e) => setDepartmentFilter(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                disabled={loadingDepartments}
               >
-                <option value="">All Semesters</option>
-                {availableSemesters.map(semester => (
-                  <option key={semester} value={semester.toString()}>
-                    Semester {semester}
+                <option value="">All Departments</option>
+                {departments.map((dept: string) => (
+                  <option key={dept} value={dept}>
+                    {dept}
                   </option>
                 ))}
               </select>
             </div>
 
-            {/* Students List */}
+            {/* Teachers List */}
             <div className="flex-1 overflow-y-auto">
-              {loadingStudents ? (
+              {loadingTeachers ? (
                 <div className="flex items-center justify-center h-32">
                   <Loader className="animate-spin text-blue-600" size={24} />
                 </div>
-              ) : filteredStudents.length === 0 ? (
+              ) : filteredTeachers.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-32 text-gray-500">
                   <Users size={32} className="mb-2" />
-                  <p className="text-sm">No students found</p>
+                  <p className="text-sm">No teachers found</p>
                 </div>
               ) : (
-                filteredStudents.map((student) => (
+                filteredTeachers.map((teacher: Teacher) => (
                   <div
-                    key={student._id}
+                    key={teacher._id}
                     className={`p-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors ${
-                      selectedStudent?._id === student._id ? 'bg-blue-50 border-blue-200' : ''
-                    } ${student.hasUnread ? 'bg-blue-25' : ''}`}
-                    onClick={() => setSelectedStudent(student)}
+                      selectedTeacher?._id === teacher._id ? 'bg-blue-50 border-blue-200' : ''
+                    }`}
+                    onClick={() => setSelectedTeacher(teacher)}
                   >
                     <div className="flex items-center gap-3">
-                      <div className="relative">
-                        <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold">
-                          {getInitials(student.fullName)}
-                        </div>
-                        {student.hasUnread && (
-                          <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
-                            <span className="text-xs text-white font-bold">
-                              {student.unreadCount > 9 ? '9+' : student.unreadCount}
-                            </span>
-                          </div>
-                        )}
+                      <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold">
+                        {getInitials(teacher.fullName)}
                       </div>
                       
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between">
-                          <h3 className={`font-semibold truncate ${student.hasUnread ? 'text-blue-800' : 'text-gray-800'}`}>
-                            {student.fullName}
-                          </h3>
-                          {student.lastMessage && (
-                            <span className="text-xs text-gray-500 whitespace-nowrap ml-2">
-                              {formatLastMessageTime(student.lastMessage.createdAt)}
+                        <h3 className="font-semibold text-gray-800 truncate">
+                          {teacher.fullName}
+                          {teacher.isModuleLeader && (
+                            <span className="ml-2 px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded-full">
+                              Module Leader
                             </span>
                           )}
-                        </div>
+                        </h3>
                         <p className="text-sm text-gray-600 truncate">
-                          {student.studentId} • Sem {student.currentSemester}
+                          {teacher.teacherId}
                         </p>
-                        {student.lastMessage && (
-                          <p className="text-xs text-gray-500 truncate mt-1">
-                            {student.lastMessage.content.length > 30 
-                              ? `${student.lastMessage.content.substring(0, 30)}...`
-                              : student.lastMessage.content
-                            }
+                        {teacher.department && (
+                          <p className="text-xs text-gray-500 truncate">
+                            {teacher.department}
                           </p>
                         )}
-                        {student.groupName && (
-                          <p className="text-xs text-gray-500 truncate">
-                            {student.groupName}
-                          </p>
+                        {teacher.subjects.length > 0 && (
+                          <div className="flex items-center gap-1 mt-1">
+                            <BookOpen size={12} className="text-gray-400" />
+                            <span className="text-xs text-gray-500">
+                              {teacher.subjects.length} subject{teacher.subjects.length !== 1 ? 's' : ''}
+                            </span>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -539,11 +482,11 @@ const TeacherChat = () => {
 
           {/* Chat Area */}
           <div className="flex-1 flex flex-col bg-white">
-            {!selectedStudent ? (
+            {!selectedTeacher ? (
               <div className="flex-1 flex flex-col items-center justify-center text-gray-500">
                 <MessageCircle size={64} className="mb-4 text-gray-300" />
-                <h3 className="text-xl font-semibold mb-2">No student selected</h3>
-                <p>Select a student from the list to start chatting</p>
+                <h3 className="text-xl font-semibold mb-2">No teacher selected</h3>
+                <p>Select a teacher from the list to start chatting</p>
               </div>
             ) : isLoadingChat ? (
               <div className="flex-1 flex items-center justify-center">
@@ -554,16 +497,27 @@ const TeacherChat = () => {
                 {/* Chat Header */}
                 <div className="p-4 border-b border-gray-200">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
-                      {getInitials(selectedStudent.fullName)}
+                    <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
+                      {getInitials(selectedTeacher.fullName)}
                     </div>
                     <div>
                       <h2 className="font-semibold text-gray-800">
-                        {selectedStudent.fullName}
+                        {selectedTeacher.fullName}
+                        {selectedTeacher.isModuleLeader && (
+                          <span className="ml-2 px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded-full">
+                            Module Leader
+                          </span>
+                        )}
                       </h2>
                       <p className="text-sm text-gray-600">
-                        {selectedStudent.studentId}
+                        {selectedTeacher.teacherId}
+                        {selectedTeacher.department && ` • ${selectedTeacher.department}`}
                       </p>
+                      {selectedTeacher.subjects.length > 0 && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          Teaches: {selectedTeacher.subjects.map(s => s.name).join(', ')}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -574,11 +528,11 @@ const TeacherChat = () => {
                     <div className="flex flex-col items-center justify-center h-full text-gray-500">
                       <MessageCircle size={48} className="mb-3 text-gray-300" />
                       <p className="text-lg font-semibold">No messages yet</p>
-                      <p className="text-sm">Start a conversation with {selectedStudent.fullName}</p>
+                      <p className="text-sm">Start a conversation with {selectedTeacher.fullName}</p>
                     </div>
                   ) : (
                     activeChat?.messages?.map((message, index) => {
-                      const isOwnMessage = message.senderModel === 'Teacher';
+                      const isOwnMessage = message.senderModel === 'Student';
                       
                       return (
                         <div key={message._id || index} className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
@@ -644,4 +598,4 @@ const TeacherChat = () => {
   );
 };
 
-export default TeacherChat;
+export default StudentChat;

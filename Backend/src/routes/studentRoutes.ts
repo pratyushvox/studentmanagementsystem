@@ -59,6 +59,13 @@ import {
   getChatParticipant as getStudentChatParticipant
 } from "../controllers/Student/chatcontroller";
 
+
+import {
+  getMyTeachers,
+  getTeacherDetails,
+  getTeacherDepartments
+} from "../controllers/Student/teacherController";
+
 const router = express.Router();
 
 // ============================================================
@@ -128,6 +135,12 @@ router.get("/attendance/summary", protect, getStudentAttendanceSummary);
 router.get("/attendance/records", protect, getStudentAttendanceRecords);
 router.get("/attendance/subject/:subjectId", protect, getStudentSubjectAttendance);
 router.get("/attendance/subjects", protect, getStudentSubjects);
+
+
+// gettingteacher details 
+router.get("/teachers", protect, getMyTeachers);
+router.get("/teachers/departments", protect, getTeacherDepartments);
+router.get("/teachers/:teacherId", protect, getTeacherDetails);
 
 
 //chat 
