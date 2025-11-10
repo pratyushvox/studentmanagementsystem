@@ -150,7 +150,7 @@ const TeacherChat = () => {
     });
   }, [sortedStudents, searchTerm, semesterFilter]);
 
-  // Initialize Socket.IO connection - FIXED VERSION
+  // Initialize Socket.IO connection - UPDATED VERSION
   useEffect(() => {
     if (!teacherId) return;
 
@@ -182,19 +182,53 @@ const TeacherChat = () => {
       console.log('🎯 Joined room:', data.roomName);
     });
 
+    // UPDATED: Handle new messages with better unread count management
     newSocket.on('newMessage', (message: Message) => {
       console.log('📨 New message received via socket:', message);
       
-      // Update active chat if this message belongs to it
+      // If this message is for the currently active chat
       if (activeChat && message.chatId === activeChat._id) {
-        setActiveChat(prev => prev ? {
-          ...prev,
-          messages: [...prev.messages, message]
-        } : null);
+        // If teacher is viewing the chat, mark as read immediately
+        if (message.senderModel === 'Student') {
+          // Optimistically update the message status to read
+          const updatedMessage = { ...message, status: 'read' as const };
+          setActiveChat(prev => prev ? {
+            ...prev,
+            messages: [...prev.messages, updatedMessage]
+          } : null);
+        } else {
+          setActiveChat(prev => prev ? {
+            ...prev,
+            messages: [...prev.messages, message]
+          } : null);
+        }
       }
       
-      // Refresh chats list to update last messages and unread counts
+      // Always refresh chats list to update unread counts and last messages
       refetchChats();
+      
+      // Show notification for new message in other chats
+      if (message.senderModel === 'Student' && (!activeChat || message.chatId !== activeChat._id)) {
+        const studentName = students.find(s => s._id === message.sender)?.fullName || 'Student';
+        toast.info(`New message from ${studentName}`, {
+          position: "bottom-right",
+          autoClose: 3000,
+        });
+      }
+    });
+
+    // NEW: Handle chat updates for unread counts
+    newSocket.on('chatUpdated', (data: { chatId: string }) => {
+      console.log('🔄 Chat updated:', data.chatId);
+      refetchChats();
+    });
+
+    // NEW: Handle messages read events
+    newSocket.on('messagesRead', (data: { chatId: string, reader: string }) => {
+      console.log('📖 Messages marked as read by:', data.reader);
+      if (activeChat && data.chatId === activeChat._id) {
+        refetchChats();
+      }
     });
 
     newSocket.on('error', (error) => {
@@ -214,29 +248,77 @@ const TeacherChat = () => {
       }
       setIsSocketConnected(false);
     };
-  }, [teacherId]); // Only depend on teacherId
+  }, [teacherId, activeChat?._id, students]); // Added dependencies
 
-  // Update active chat when socket receives messages
+  // Handle student selection and mark messages as read
+  const handleStudentSelect = async (student: Student) => {
+    setSelectedStudent(student);
+    setIsLoadingChat(true);
+    
+    try {
+      // Find existing chat
+      let existingChat: Chat | null = null;
+      if (Array.isArray(chats)) {
+        existingChat = chats.find((chat: Chat) => 
+          chat.participants?.some(
+            (p: any) => p.model === 'Student' && p.item === student._id
+          )
+        ) || null;
+      }
+
+      if (existingChat) {
+        setActiveChat(existingChat);
+        
+        // Mark student messages as read when teacher opens the chat
+        if (existingChat._id && teacherId) {
+          try {
+            // Call getMessages endpoint to mark messages as read
+            await fetch(`/api/teacher/chat/messages/${existingChat._id}?teacherId=${teacherId}`);
+            console.log('✅ Messages marked as read');
+          } catch (error) {
+            console.error('Failed to mark messages as read:', error);
+          }
+        }
+        
+        // Refresh chats to update unread counts
+        refetchChats();
+      } else {
+        // Create new chat
+        const result = await createChat('/teacher/chat', {
+          participants: [
+            { item: teacherId, model: 'Teacher' },
+            { item: student._id, model: 'Student' }
+          ]
+        });
+        
+        if (result) {
+          setActiveChat(result);
+          refetchChats();
+        }
+      }
+    } catch (error: any) {
+      console.error('Chat error:', error);
+      toast.error(error?.message || 'Failed to load chat');
+    } finally {
+      setIsLoadingChat(false);
+    }
+  };
+
+  // NEW: Fetch messages for active chat and mark as read
   useEffect(() => {
-    if (!socketRef.current || !activeChat) return;
-
-    const handleNewMessage = (message: Message) => {
-      if (message.chatId === activeChat._id) {
-        setActiveChat(prev => prev ? {
-          ...prev,
-          messages: [...prev.messages, message]
-        } : null);
-      }
-    };
-
-    socketRef.current.on('newMessage', handleNewMessage);
-
-    return () => {
-      if (socketRef.current) {
-        socketRef.current.off('newMessage', handleNewMessage);
-      }
-    };
-  }, [activeChat?._id]);
+    if (activeChat?._id && teacherId) {
+      // Fetch messages and mark as read
+      const fetchMessages = async () => {
+        try {
+          await fetch(`/api/teacher/chat/messages/${activeChat._id}?teacherId=${teacherId}`);
+        } catch (error) {
+          console.error('Failed to fetch messages:', error);
+        }
+      };
+      
+      fetchMessages();
+    }
+  }, [activeChat?._id, teacherId]);
 
   // Handle errors
   useEffect(() => {
@@ -265,51 +347,6 @@ const TeacherChat = () => {
     return Array.from(semesters).sort();
   }, [students]);
 
-  // Find or create chat when student is selected
-  useEffect(() => {
-    if (!selectedStudent || !teacherId) return;
-
-    const findOrCreateChat = async () => {
-      setIsLoadingChat(true);
-      try {
-        // First, check if chat already exists
-        let existingChat: Chat | null = null;
-        
-        if (Array.isArray(chats)) {
-          existingChat = chats.find((chat: Chat) => 
-            chat.participants?.some(
-              (p: any) => p.model === 'Student' && p.item === selectedStudent._id
-            )
-          ) || null;
-        }
-
-        if (existingChat) {
-          setActiveChat(existingChat);
-        } else {
-          // Create new chat
-          const result = await createChat('/teacher/chat', {
-            participants: [
-              { item: teacherId, model: 'Teacher' },
-              { item: selectedStudent._id, model: 'Student' }
-            ]
-          });
-          
-          if (result) {
-            setActiveChat(result);
-            refetchChats(); // Refresh chats list
-          }
-        }
-      } catch (error: any) {
-        console.error('Chat error:', error);
-        toast.error(error?.message || 'Failed to load chat');
-      } finally {
-        setIsLoadingChat(false);
-      }
-    };
-
-    findOrCreateChat();
-  }, [selectedStudent, chats, createChat, refetchChats, teacherId]);
-
   // Scroll to bottom of messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -335,7 +372,6 @@ const TeacherChat = () => {
         
         refetchChats(); // Refresh chats list
         
-        // The Socket.IO will handle real-time updates from backend
         console.log('✅ Message sent successfully');
       }
     } catch (error: any) {
@@ -380,6 +416,11 @@ const TeacherChat = () => {
       .toUpperCase()
       .slice(0, 2);
   };
+
+  // Calculate total unread count across all chats
+  const totalUnreadCount = useMemo(() => {
+    return studentsWithChatInfo.reduce((total, student) => total + student.unreadCount, 0);
+  }, [studentsWithChatInfo]);
 
   // Show loading state while fetching profile
   if (loadingProfile || !teacherId) {
@@ -431,7 +472,14 @@ const TeacherChat = () => {
           <div className="w-80 bg-white border-r border-gray-200 flex flex-col">
             {/* Header */}
             <div className="p-4 border-b border-gray-200">
-              <h1 className="text-xl font-bold text-gray-800">Messages</h1>
+              <div className="flex items-center justify-between">
+                <h1 className="text-xl font-bold text-gray-800">Messages</h1>
+                {totalUnreadCount > 0 && (
+                  <span className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">
+                    {totalUnreadCount > 9 ? '9+' : totalUnreadCount}
+                  </span>
+                )}
+              </div>
               <p className="text-sm text-gray-600">Chat with your students</p>
               <div className="flex items-center gap-2 mt-1">
                 <div className={`w-2 h-2 rounded-full ${isSocketConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
@@ -485,8 +533,8 @@ const TeacherChat = () => {
                     key={student._id}
                     className={`p-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors ${
                       selectedStudent?._id === student._id ? 'bg-blue-50 border-blue-200' : ''
-                    } ${student.hasUnread ? 'bg-blue-25' : ''}`}
-                    onClick={() => setSelectedStudent(student)}
+                    } ${student.hasUnread ? 'bg-orange-50 border-orange-200' : ''}`}
+                    onClick={() => handleStudentSelect(student)}
                   >
                     <div className="flex items-center gap-3">
                       <div className="relative">
@@ -494,7 +542,7 @@ const TeacherChat = () => {
                           {getInitials(student.fullName)}
                         </div>
                         {student.hasUnread && (
-                          <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
+                          <div className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center animate-pulse">
                             <span className="text-xs text-white font-bold">
                               {student.unreadCount > 9 ? '9+' : student.unreadCount}
                             </span>
@@ -504,7 +552,7 @@ const TeacherChat = () => {
                       
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between">
-                          <h3 className={`font-semibold truncate ${student.hasUnread ? 'text-blue-800' : 'text-gray-800'}`}>
+                          <h3 className={`font-semibold truncate ${student.hasUnread ? 'text-blue-800 font-bold' : 'text-gray-800'}`}>
                             {student.fullName}
                           </h3>
                           {student.lastMessage && (
@@ -565,6 +613,11 @@ const TeacherChat = () => {
                         {selectedStudent.studentId}
                       </p>
                     </div>
+                    {studentsWithChatInfo.find(s => s._id === selectedStudent._id)?.hasUnread && (
+                      <span className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full ml-auto">
+                        New messages
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -588,10 +641,13 @@ const TeacherChat = () => {
                               : 'bg-white text-gray-800 rounded-bl-none border border-gray-200'
                           }`}>
                             <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                            <div className={`text-xs mt-1 ${
+                            <div className={`flex items-center gap-1 text-xs mt-1 ${
                               isOwnMessage ? 'text-blue-200' : 'text-gray-500'
                             }`}>
                               {formatTime(message.createdAt)}
+                              {!isOwnMessage && message.status === 'read' && (
+                                <span className="text-green-500">✓ Read</span>
+                              )}
                             </div>
                           </div>
                         </div>

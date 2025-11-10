@@ -113,7 +113,61 @@ const StudentChat = () => {
   const departments = departmentsResponse?.departments || [];
   const chats = chatsResponse || [];
 
-  // Initialize Socket.IO connection - FIXED VERSION
+  // Get teachers with their chat info and unread counts
+  const teachersWithChatInfo = useMemo(() => {
+    return teachers.map((teacher: Teacher) => {
+      // Find the chat for this teacher
+      const teacherChat = Array.isArray(chats) ? chats.find((chat: Chat) => 
+        chat.participants?.some(
+          (p: any) => p.model === 'Teacher' && p.item === teacher._id
+        )
+      ) : null;
+
+      return {
+        ...teacher,
+        chat: teacherChat,
+        unreadCount: teacherChat?.unreadCount || 0,
+        lastMessage: teacherChat?.lastMessage,
+        hasUnread: (teacherChat?.unreadCount || 0) > 0
+      };
+    });
+  }, [teachers, chats]);
+
+  // Sort teachers: unread messages first, then by last message time
+  const sortedTeachers = useMemo(() => {
+    return [...teachersWithChatInfo].sort((a, b) => {
+      // First sort by unread count (descending)
+      if (a.unreadCount > b.unreadCount) return -1;
+      if (a.unreadCount < b.unreadCount) return 1;
+      
+      // Then sort by last message time (most recent first)
+      if (a.lastMessage && b.lastMessage) {
+        return new Date(b.lastMessage.createdAt).getTime() - new Date(a.lastMessage.createdAt).getTime();
+      }
+      if (a.lastMessage) return -1;
+      if (b.lastMessage) return 1;
+      
+      // Finally sort by name
+      return a.fullName.localeCompare(b.fullName);
+    });
+  }, [teachersWithChatInfo]);
+
+  // Filter teachers based on search and department
+  const filteredTeachers = useMemo(() => {
+    return sortedTeachers.filter((teacher) => {
+      const matchesSearch = searchTerm === '' || 
+        teacher.fullName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        teacher.teacherId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        teacher.department?.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      const matchesDepartment = departmentFilter === '' || 
+        teacher.department === departmentFilter;
+      
+      return matchesSearch && matchesDepartment;
+    });
+  }, [sortedTeachers, searchTerm, departmentFilter]);
+
+  // Initialize Socket.IO connection - UPDATED VERSION
   useEffect(() => {
     if (!studentId) return;
 
@@ -145,19 +199,53 @@ const StudentChat = () => {
       console.log('🎯 Joined room:', data.roomName);
     });
 
+    // UPDATED: Handle new messages with better unread count management
     newSocket.on('newMessage', (message: Message) => {
       console.log('📨 New message received via socket:', message);
       
-      // Update active chat if this message belongs to it
+      // If this message is for the currently active chat
       if (activeChat && message.chatId === activeChat._id) {
-        setActiveChat(prev => prev ? {
-          ...prev,
-          messages: [...prev.messages, message]
-        } : null);
+        // If student is viewing the chat, mark as read immediately
+        if (message.senderModel === 'Teacher') {
+          // Optimistically update the message status to read
+          const updatedMessage = { ...message, status: 'read' as const };
+          setActiveChat(prev => prev ? {
+            ...prev,
+            messages: [...prev.messages, updatedMessage]
+          } : null);
+        } else {
+          setActiveChat(prev => prev ? {
+            ...prev,
+            messages: [...prev.messages, message]
+          } : null);
+        }
       }
       
-      // Refresh chats list to update last messages and unread counts
+      // Always refresh chats list to update unread counts and last messages
       refetchChats();
+      
+      // Show notification for new message in other chats
+      if (message.senderModel === 'Teacher' && (!activeChat || message.chatId !== activeChat._id)) {
+        const teacherName = teachers.find(t => t._id === message.sender)?.fullName || 'Teacher';
+        toast.info(`New message from ${teacherName}`, {
+          position: "bottom-right",
+          autoClose: 3000,
+        });
+      }
+    });
+
+    // NEW: Handle chat updates for unread counts
+    newSocket.on('chatUpdated', (data: { chatId: string }) => {
+      console.log('🔄 Chat updated:', data.chatId);
+      refetchChats();
+    });
+
+    // NEW: Handle messages read events
+    newSocket.on('messagesRead', (data: { chatId: string, reader: string }) => {
+      console.log('📖 Messages marked as read by:', data.reader);
+      if (activeChat && data.chatId === activeChat._id) {
+        refetchChats();
+      }
     });
 
     newSocket.on('error', (error) => {
@@ -177,29 +265,77 @@ const StudentChat = () => {
       }
       setIsSocketConnected(false);
     };
-  }, [studentId]); // Only depend on studentId
+  }, [studentId, activeChat?._id, teachers]); // Added dependencies
 
-  // Update active chat when socket receives messages
+  // Handle teacher selection and mark messages as read
+  const handleTeacherSelect = async (teacher: Teacher) => {
+    setSelectedTeacher(teacher);
+    setIsLoadingChat(true);
+    
+    try {
+      // Find existing chat
+      let existingChat: Chat | null = null;
+      if (Array.isArray(chats)) {
+        existingChat = chats.find((chat: Chat) => 
+          chat.participants?.some(
+            (p: any) => p.model === 'Teacher' && p.item === teacher._id
+          )
+        ) || null;
+      }
+
+      if (existingChat) {
+        setActiveChat(existingChat);
+        
+        // Mark teacher messages as read when student opens the chat
+        if (existingChat._id && studentId) {
+          try {
+            // Call getMessages endpoint to mark messages as read
+            await fetch(`/api/student/chat/messages/${existingChat._id}?studentId=${studentId}`);
+            console.log('✅ Messages marked as read');
+          } catch (error) {
+            console.error('Failed to mark messages as read:', error);
+          }
+        }
+        
+        // Refresh chats to update unread counts
+        refetchChats();
+      } else {
+        // Create new chat
+        const result = await createChat('/student/chat', {
+          participants: [
+            { item: studentId, model: 'Student' },
+            { item: teacher._id, model: 'Teacher' }
+          ]
+        });
+        
+        if (result) {
+          setActiveChat(result);
+          refetchChats();
+        }
+      }
+    } catch (error: any) {
+      console.error('Chat error:', error);
+      toast.error(error?.message || 'Failed to load chat');
+    } finally {
+      setIsLoadingChat(false);
+    }
+  };
+
+  // NEW: Fetch messages for active chat and mark as read
   useEffect(() => {
-    if (!socketRef.current || !activeChat) return;
-
-    const handleNewMessage = (message: Message) => {
-      if (message.chatId === activeChat._id) {
-        setActiveChat(prev => prev ? {
-          ...prev,
-          messages: [...prev.messages, message]
-        } : null);
-      }
-    };
-
-    socketRef.current.on('newMessage', handleNewMessage);
-
-    return () => {
-      if (socketRef.current) {
-        socketRef.current.off('newMessage', handleNewMessage);
-      }
-    };
-  }, [activeChat?._id]);
+    if (activeChat?._id && studentId) {
+      // Fetch messages and mark as read
+      const fetchMessages = async () => {
+        try {
+          await fetch(`/api/student/chat/messages/${activeChat._id}?studentId=${studentId}`);
+        } catch (error) {
+          console.error('Failed to fetch messages:', error);
+        }
+      };
+      
+      fetchMessages();
+    }
+  }, [activeChat?._id, studentId]);
 
   // Handle errors
   useEffect(() => {
@@ -217,66 +353,6 @@ const StudentChat = () => {
     }
   }, [profileError, teachersError, chatsError]);
 
-  // Filter teachers based on search and department
-  const filteredTeachers = useMemo(() => {
-    return teachers.filter((teacher: Teacher) => {
-      const matchesSearch = searchTerm === '' || 
-        teacher.fullName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        teacher.teacherId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        teacher.department?.toLowerCase().includes(searchTerm.toLowerCase());
-      
-      const matchesDepartment = departmentFilter === '' || 
-        teacher.department === departmentFilter;
-      
-      return matchesSearch && matchesDepartment;
-    });
-  }, [teachers, searchTerm, departmentFilter]);
-
-  // Find or create chat when teacher is selected
-  useEffect(() => {
-    if (!selectedTeacher || !studentId) return;
-
-    const findOrCreateChat = async () => {
-      setIsLoadingChat(true);
-      try {
-        // First, check if chat already exists
-        let existingChat: Chat | null = null;
-        
-        if (Array.isArray(chats)) {
-          existingChat = chats.find((chat: Chat) => 
-            chat.participants?.some(
-              (p: any) => p.model === 'Teacher' && p.item === selectedTeacher._id
-            )
-          ) || null;
-        }
-
-        if (existingChat) {
-          setActiveChat(existingChat);
-        } else {
-          // Create new chat
-          const result = await createChat('/student/chat', {
-            participants: [
-              { item: studentId, model: 'Student' },
-              { item: selectedTeacher._id, model: 'Teacher' }
-            ]
-          });
-          
-          if (result) {
-            setActiveChat(result);
-            refetchChats(); // Refresh chats list
-          }
-        }
-      } catch (error: any) {
-        console.error('Chat error:', error);
-        toast.error(error?.message || 'Failed to load chat');
-      } finally {
-        setIsLoadingChat(false);
-      }
-    };
-
-    findOrCreateChat();
-  }, [selectedTeacher, chats, createChat, refetchChats, studentId]);
-
   // Scroll to bottom of messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -286,7 +362,7 @@ const StudentChat = () => {
     if (!messageInput.trim() || !activeChat || !studentId) return;
 
     try {
-      const result = await sendMessage('/student/chat/message', {
+      const result = await sendMessage('/student/chat/send', {
         chatId: activeChat._id,
         sender: studentId,
         content: messageInput.trim()
@@ -302,7 +378,6 @@ const StudentChat = () => {
         
         refetchChats(); // Refresh chats list
         
-        // The Socket.IO will handle real-time updates from backend
         console.log('✅ Message sent successfully');
       }
     } catch (error: any) {
@@ -325,6 +400,20 @@ const StudentChat = () => {
     });
   };
 
+  const formatLastMessageTime = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
+    
+    if (diffInHours < 24) {
+      return formatTime(dateString);
+    } else if (diffInHours < 48) {
+      return 'Yesterday';
+    } else {
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    }
+  };
+
   const getInitials = (name: string) => {
     return name
       .split(' ')
@@ -333,6 +422,11 @@ const StudentChat = () => {
       .toUpperCase()
       .slice(0, 2);
   };
+
+  // Calculate total unread count across all chats
+  const totalUnreadCount = useMemo(() => {
+    return teachersWithChatInfo.reduce((total, teacher) => total + teacher.unreadCount, 0);
+  }, [teachersWithChatInfo]);
 
   // Show loading state while fetching profile
   if (loadingProfile || !studentId) {
@@ -384,7 +478,14 @@ const StudentChat = () => {
           <div className="w-80 bg-white border-r border-gray-200 flex flex-col">
             {/* Header */}
             <div className="p-4 border-b border-gray-200">
-              <h1 className="text-xl font-bold text-gray-800">Messages</h1>
+              <div className="flex items-center justify-between">
+                <h1 className="text-xl font-bold text-gray-800">Messages</h1>
+                {totalUnreadCount > 0 && (
+                  <span className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">
+                    {totalUnreadCount > 9 ? '9+' : totalUnreadCount}
+                  </span>
+                )}
+              </div>
               <p className="text-sm text-gray-600">Chat with your teachers</p>
               <div className="flex items-center gap-2 mt-1">
                 <div className={`w-2 h-2 rounded-full ${isSocketConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
@@ -434,34 +535,58 @@ const StudentChat = () => {
                   <p className="text-sm">No teachers found</p>
                 </div>
               ) : (
-                filteredTeachers.map((teacher: Teacher) => (
+                filteredTeachers.map((teacher) => (
                   <div
                     key={teacher._id}
                     className={`p-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors ${
                       selectedTeacher?._id === teacher._id ? 'bg-blue-50 border-blue-200' : ''
-                    }`}
-                    onClick={() => setSelectedTeacher(teacher)}
+                    } ${teacher.hasUnread ? 'bg-orange-50 border-orange-200' : ''}`}
+                    onClick={() => handleTeacherSelect(teacher)}
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold">
-                        {getInitials(teacher.fullName)}
+                      <div className="relative">
+                        <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold">
+                          {getInitials(teacher.fullName)}
+                        </div>
+                        {teacher.hasUnread && (
+                          <div className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center animate-pulse">
+                            <span className="text-xs text-white font-bold">
+                              {teacher.unreadCount > 9 ? '9+' : teacher.unreadCount}
+                            </span>
+                          </div>
+                        )}
                       </div>
                       
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-gray-800 truncate">
-                          {teacher.fullName}
-                          {teacher.isModuleLeader && (
-                            <span className="ml-2 px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded-full">
-                              Module Leader
+                        <div className="flex items-center justify-between">
+                          <h3 className={`font-semibold text-gray-800 truncate ${teacher.hasUnread ? 'text-blue-800 font-bold' : ''}`}>
+                            {teacher.fullName}
+                            {teacher.isModuleLeader && (
+                              <span className="ml-2 px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded-full">
+                                Module Leader
+                              </span>
+                            )}
+                          </h3>
+                          {teacher.lastMessage && (
+                            <span className="text-xs text-gray-500 whitespace-nowrap ml-2">
+                              {formatLastMessageTime(teacher.lastMessage.createdAt)}
                             </span>
                           )}
-                        </h3>
+                        </div>
                         <p className="text-sm text-gray-600 truncate">
                           {teacher.teacherId}
                         </p>
                         {teacher.department && (
                           <p className="text-xs text-gray-500 truncate">
                             {teacher.department}
+                          </p>
+                        )}
+                        {teacher.lastMessage && (
+                          <p className="text-xs text-gray-500 truncate mt-1">
+                            {teacher.lastMessage.content.length > 30 
+                              ? `${teacher.lastMessage.content.substring(0, 30)}...`
+                              : teacher.lastMessage.content
+                            }
                           </p>
                         )}
                         {teacher.subjects.length > 0 && (
@@ -519,6 +644,11 @@ const StudentChat = () => {
                         </p>
                       )}
                     </div>
+                    {teachersWithChatInfo.find(t => t._id === selectedTeacher._id)?.hasUnread && (
+                      <span className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full ml-auto">
+                        New messages
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -542,10 +672,13 @@ const StudentChat = () => {
                               : 'bg-white text-gray-800 rounded-bl-none border border-gray-200'
                           }`}>
                             <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                            <div className={`text-xs mt-1 ${
+                            <div className={`flex items-center gap-1 text-xs mt-1 ${
                               isOwnMessage ? 'text-blue-200' : 'text-gray-500'
                             }`}>
                               {formatTime(message.createdAt)}
+                              {!isOwnMessage && message.status === 'read' && (
+                                <span className="text-green-500">✓ Read</span>
+                              )}
                             </div>
                           </div>
                         </div>

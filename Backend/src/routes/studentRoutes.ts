@@ -49,16 +49,15 @@ import {
   getStudentSubjects
 } from "../controllers/Student/studentattendancecontroller";
 
-//chat
-
+// Chat
 import {
   createChat as createStudentChat,
   getChats as getStudentChats,
   getMessages as getStudentMessages,
   sendMessage as sendStudentMessage,
-  getChatParticipant as getStudentChatParticipant
+  getChatParticipant as getStudentChatParticipant,
+  getUnreadCount as getStudentUnreadCount
 } from "../controllers/Student/chatcontroller";
-
 
 import {
   getMyTeachers,
@@ -75,7 +74,7 @@ router.post("/complete-profile", protect, completeProfile);
 router.get("/profile", protect, getStudentProfile);
 router.put("/profile", protect, updateStudentProfile);
 router.get("/profile-status", protect, checkProfileStatus);
-router.put("/password/update",protect,updateStudentPassword)
+router.put("/password/update", protect, updateStudentPassword);
 
 // ✅ Upload profile photo
 router.post(
@@ -136,19 +135,21 @@ router.get("/attendance/records", protect, getStudentAttendanceRecords);
 router.get("/attendance/subject/:subjectId", protect, getStudentSubjectAttendance);
 router.get("/attendance/subjects", protect, getStudentSubjects);
 
-
-// gettingteacher details 
+// ============================================================
+// TEACHER MANAGEMENT
+// ============================================================
 router.get("/teachers", protect, getMyTeachers);
 router.get("/teachers/departments", protect, getTeacherDepartments);
 router.get("/teachers/:teacherId", protect, getTeacherDetails);
 
-
-//chat 
+// ============================================================
+// CHAT ROUTES (UPDATED)
+// ============================================================
 router.post("/chat", protect, createStudentChat);
 router.get("/chat/:studentId", protect, getStudentChats);
 router.get("/chat/messages/:chatId", protect, getStudentMessages);
-router.post("/chat/message", protect, sendStudentMessage);
-router.get("/chat/participant/:chatId/:userId", protect, getStudentChatParticipant);
-
+router.post("/chat/send", protect, sendStudentMessage); // Fixed endpoint to match teacher
+router.get("/chat/participant/:chatId/:studentId", protect, getStudentChatParticipant);
+router.get("/chat/unread/:studentId", protect, getStudentUnreadCount); // Fixed function name
 
 export default router;

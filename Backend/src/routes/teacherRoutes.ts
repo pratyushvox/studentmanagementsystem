@@ -81,7 +81,8 @@ import {
   getChats,
   sendMessage,
   getMessages,
-  getChatParticipant
+  getChatParticipant,
+   getUnreadCount
 } from "../controllers/Teacher/chatcontroller";
 
 const router = express.Router();
@@ -257,5 +258,8 @@ router.post("/chat/send", protect, teacherOnly, sendMessage);
 
 // Get other participant of chat
 router.get("/chat/participant/:chatId/:teacherId", protect, teacherOnly, getChatParticipant)
+
+//get unread message 
+router.get('/unread/:teacherId', protect,teacherOnly,getUnreadCount);
 
 export default router;

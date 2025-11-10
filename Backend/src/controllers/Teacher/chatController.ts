@@ -1,22 +1,24 @@
-// controllers/Chat/teacherChatController.ts
+// controllers/Chat/studentChatController.ts
 import { Request, Response } from "express";
-import Chat from "../../models/Chat.js";
-import Teacher from "../../models/Teacher.js";
-import Student from "../../models/Student.js";
+import Chat from "../../models/Chat";
+import Teacher from "../../models/Teacher";
+import Student from "../../models/Student";
 import { getIO } from "../../utils/io";
 
-// Populate participant details
+// Helper: Populate participant details
 const populateParticipant = async (participant: any) => {
   if (!participant || !participant.model || !participant.item) return { details: null };
-  const Model = participant.model === "Student" ? Student : Teacher;
+
+  const Model = participant.model === "Teacher" ? Teacher : Student;
   const doc = await Model.findById(participant.item)
     .select("fullName profilePhoto studentId teacherId")
     .lean();
+
   return { ...participant, details: doc || null };
 };
 
 // Helper for room names
-const getRoleFromModel = (model: string) => (model === "Student" ? "student" : "teacher");
+const getRoleFromModel = (model: string) => (model === "Teacher" ? "teacher" : "student");
 
 // =========================
 // CREATE CHAT
@@ -28,7 +30,7 @@ export const createChat = async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Chat requires exactly 2 participants" });
 
     for (const p of participants) {
-      const Model = p.model === "Student" ? Student : Teacher;
+      const Model = p.model === "Teacher" ? Teacher : Student;
       const exists = await Model.exists({ _id: p.item });
       if (!exists) return res.status(404).json({ error: `${p.model} not found` });
     }
@@ -40,28 +42,33 @@ export const createChat = async (req: Request, res: Response) => {
     const populatedParticipants = await Promise.all(chat.participants.map(populateParticipant));
     res.status(200).json({ ...chat.toObject(), participants: populatedParticipants });
   } catch (err) {
-    console.error("Teacher Chat creation error:", err);
+    console.error("Student Chat creation error:", err);
     res.status(500).json({ error: "Unable to create/fetch chat" });
   }
 };
 
 // =========================
-// GET CHATS
+// GET CHATS - UPDATED
 // =========================
 export const getChats = async (req: Request, res: Response) => {
-  const teacherId = req.params.teacherId;
+  const studentId = req.params.studentId;
   try {
-    const chats = await Chat.find({ "participants.item": teacherId }).sort({ updatedAt: -1 }).lean();
+    const chats = await Chat.find({ "participants.item": studentId }).sort({ updatedAt: -1 }).lean();
 
     const enhanced = await Promise.all(
       chats.map(async (chat) => {
-        const other = chat.participants.find((p: any) => p.item.toString() !== teacherId);
+        const other = chat.participants.find((p: any) => p.item.toString() !== studentId);
         if (!other) return { ...chat, otherParticipant: null, lastMessage: null, unreadCount: 0 };
 
         const populated = await populateParticipant(other);
         const lastMessage = chat.messages?.[chat.messages.length - 1] || null;
+        
+        // COUNT UNREAD MESSAGES: Only teacher messages with status 'sent'
         const unreadCount = chat.messages?.filter(
-          (m: any) => m.sender.toString() !== teacherId && m.status === "sent"
+          (m: any) => 
+            m.sender.toString() !== studentId && 
+            m.senderModel === 'Teacher' && 
+            m.status === 'sent'
         ).length || 0;
 
         return { ...chat, otherParticipant: populated.details, lastMessage, unreadCount };
@@ -70,69 +77,125 @@ export const getChats = async (req: Request, res: Response) => {
 
     res.status(200).json(enhanced);
   } catch (err) {
-    console.error("Teacher fetch chats error:", err);
+    console.error("Student fetch chats error:", err);
     res.status(500).json({ error: "Unable to fetch chats" });
   }
 };
 
 // =========================
-// GET MESSAGES
+// GET MESSAGES - UPDATED
 // =========================
 export const getMessages = async (req: Request, res: Response) => {
   const { chatId } = req.params;
-  const { teacherId } = req.query;
+  const { studentId } = req.query;
   try {
-    const chat = await Chat.findById(chatId).lean();
+    let chat = await Chat.findById(chatId);
     if (!chat) return res.status(404).json({ error: "Chat not found" });
 
-    if (teacherId) {
-      await Chat.updateOne(
+    // MARK MESSAGES AS READ when student opens chat
+    if (studentId) {
+      let hasUnreadMessages = false;
+      
+      const updateResult = await Chat.updateOne(
         { _id: chatId },
-        { $set: { "messages.$[elem].status": "read" } },
-        { arrayFilters: [{ "elem.sender": { $ne: teacherId }, "elem.status": "sent" }] }
+        {
+          $set: { "messages.$[elem].status": "read" }
+        },
+        {
+          arrayFilters: [
+            { 
+              "elem.sender": { $ne: studentId }, 
+              "elem.senderModel": "Teacher",
+              "elem.status": "sent" 
+            }
+          ]
+        }
       );
+
+      // If messages were updated, emit socket event
+      if (updateResult.modifiedCount > 0) {
+        const io = getIO();
+        // Notify teacher that their messages were read
+        const teacherParticipant = chat.participants.find(
+          (p: any) => p.model === 'Teacher'
+        );
+        if (teacherParticipant) {
+          const teacherRoom = `teacher:${teacherParticipant.item}`;
+          io?.to(teacherRoom).emit("messagesRead", { 
+            chatId, 
+            reader: studentId,
+            timestamp: new Date()
+          });
+        }
+        
+        // Refresh the chat data after update
+        chat = await Chat.findById(chatId);
+      }
     }
 
     const participants = await Promise.all(chat.participants.map(populateParticipant));
-    res.status(200).json({ messages: chat.messages || [], participants });
+
+    res.status(200).json({
+      messages: chat.messages || [],
+      participants
+    });
   } catch (err) {
-    console.error("Teacher getMessages error:", err);
+    console.error("Student getMessages error:", err);
     res.status(500).json({ error: "Unable to fetch messages" });
   }
 };
 
 // =========================
-// SEND MESSAGE
+// SEND MESSAGE - UPDATED
 // =========================
 export const sendMessage = async (req: Request, res: Response) => {
   const { chatId, sender, content, attachment } = req.body;
   try {
-    if (!chatId || !sender || !content?.trim()) return res.status(400).json({ error: "Missing fields" });
+    if (!chatId || !sender || !content?.trim()) 
+      return res.status(400).json({ error: "Missing fields" });
 
     const chat = await Chat.findById(chatId);
     if (!chat) return res.status(404).json({ error: "Chat not found" });
 
-    // Prevent duplicate messages (same content within 5 seconds)
+    // Prevent duplicate messages (same content in last 5s)
     const now = new Date();
     const fiveSecondsAgo = new Date(now.getTime() - 5000);
     const duplicate = chat.messages.find(
-      (m: any) => m.sender.toString() === sender && m.content === content.trim() && new Date(m.createdAt) > fiveSecondsAgo
+      (m: any) => 
+        m.sender.toString() === sender && 
+        m.content === content.trim() && 
+        new Date(m.createdAt) > fiveSecondsAgo
     );
+    
     if (duplicate) return res.status(200).json(duplicate);
 
-    const message = { sender, senderModel: "Teacher", content: content.trim(), attachment, status: "sent", createdAt: now };
+    const message = { 
+      sender, 
+      senderModel: "Student", 
+      content: content.trim(), 
+      attachment, 
+      status: "sent", 
+      createdAt: now 
+    };
+    
     chat.messages.push(message as any);
     await chat.save();
 
     const io = getIO();
     for (const participant of chat.participants) {
       const room = `${getRoleFromModel(participant.model)}:${participant.item}`;
-      io?.to(room).emit("newMessage", message);
+      io?.to(room).emit("newMessage", {
+        ...message,
+        chatId: chat._id // Include chatId for frontend filtering
+      });
+      
+      // Emit chat update for unread counts
+      io?.to(room).emit("chatUpdated", { chatId: chat._id });
     }
 
     res.status(201).json(message);
   } catch (err) {
-    console.error("Teacher sendMessage error:", err);
+    console.error("Student sendMessage error:", err);
     res.status(500).json({ error: "Unable to send message" });
   }
 };
@@ -141,18 +204,43 @@ export const sendMessage = async (req: Request, res: Response) => {
 // GET CHAT PARTICIPANT
 // =========================
 export const getChatParticipant = async (req: Request, res: Response) => {
-  const { chatId, teacherId } = req.params;
+  const { chatId, studentId } = req.params;
   try {
     const chat = await Chat.findById(chatId);
     if (!chat) return res.status(404).json({ error: "Chat not found" });
 
-    const other = chat.participants.find((p: any) => p.item.toString() !== teacherId);
+    const other = chat.participants.find((p: any) => p.item.toString() !== studentId);
     if (!other) return res.status(404).json({ error: "Participant not found" });
 
     const populated = await populateParticipant(other);
     res.status(200).json(populated.details);
   } catch (err) {
-    console.error("Teacher getChatParticipant error:", err);
+    console.error("Student getChatParticipant error:", err);
     res.status(500).json({ error: "Unable to fetch participant" });
+  }
+};
+
+// =========================
+// GET UNREAD COUNT - NEW ENDPOINT
+// =========================
+export const getUnreadCount = async (req: Request, res: Response) => {
+  const studentId = req.params.studentId;
+  try {
+    const chats = await Chat.find({ "participants.item": studentId }).lean();
+    
+    const totalUnread = chats.reduce((count, chat) => {
+      const chatUnread = chat.messages?.filter(
+        (m: any) => 
+          m.sender.toString() !== studentId && 
+          m.senderModel === 'Teacher' && 
+          m.status === 'sent'
+      ).length || 0;
+      return count + chatUnread;
+    }, 0);
+
+    res.status(200).json({ totalUnread });
+  } catch (err) {
+    console.error("Get unread count error:", err);
+    res.status(500).json({ error: "Unable to fetch unread count" });
   }
 };
