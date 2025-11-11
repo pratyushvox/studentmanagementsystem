@@ -1,7 +1,7 @@
 import express from "express";
 import { protect, teacherOnly } from "../middleware/authMiddleware";
 import { upload } from "../middleware/uploadMiddleware";
-
+import { uploadMemory } from "../middleware/uploadmiddlewareforai.js";
 
 // Dashboard
 import { getTeacherDashboard } from "../controllers/Teacher/dashboardController";
@@ -84,6 +84,10 @@ import {
   getChatParticipant,
    getUnreadCount
 } from "../controllers/Teacher/chatcontroller";
+
+// AI Analysis
+import { AIAnalysisController } from "../controllers/Teacher/aiAnalysisController";
+
 
 const router = express.Router();
 
@@ -183,6 +187,21 @@ router.patch(
   teacherOnly,
   gradeSubmission
 );
+
+/* ============================================================
+ 🤖 AI ANALYSIS
+============================================================ */
+// Analyze assignment file upload (for drag-and-drop or manual uploads)
+router.post(
+  "/ai/analyze-assignment",
+  protect,
+  teacherOnly,
+  uploadMemory.single("file"), // Use memory storage for AI analysis
+  AIAnalysisController.analyzeAssignment
+);
+
+
+
 
 /* ============================================================
  📰 COURSE MATERIALS (POSTS)

@@ -8,9 +8,10 @@ import UserFormModal from '../../components/Userformmodal';
 import { useApiGet } from '../../hooks/useApi';
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import PDFViewerModal from '../../components/PDFViewerModal';
 
 // ✅ FIX: Add API base URL configuration
-const API_BASE_URL =  'http://localhost:5000/api';
+const API_BASE_URL = 'http://localhost:5000/api';
 
 const TeacherGradingDashboard = () => {
   const [activeItem, setActiveItem] = useState('grading');
@@ -25,6 +26,9 @@ const TeacherGradingDashboard = () => {
   const [selectedGroup, setSelectedGroup] = useState('');
   const [availableGroups, setAvailableGroups] = useState([]);
   const [gradingLoading, setGradingLoading] = useState(false);
+  const [pdfViewerOpen, setPdfViewerOpen] = useState(false);
+  const [currentPdfUrl, setCurrentPdfUrl] = useState('');
+  const [currentSubmissionId, setCurrentSubmissionId] = useState(null); // ✅ NEW: Store submission ID for AI analysis
 
   // Fetch teacher's assigned subjects
   const { 
@@ -157,6 +161,50 @@ const TeacherGradingDashboard = () => {
     } finally {
       setGradingLoading(false);
     }
+  };
+
+  // ✅ UPDATED: Function to open PDF viewer with submission ID
+  const openPdfViewer = (fileUrl, submissionId) => {
+    console.log('📖 Opening PDF viewer for:', fileUrl, 'Submission ID:', submissionId);
+    
+    if (!fileUrl) {
+      toast.error('No PDF file available to view', {
+        position: "top-right",
+        autoClose: 3000,
+      });
+      return;
+    }
+
+    // For PDF files, open in the modal viewer
+    if (fileUrl.toLowerCase().endsWith('.pdf') || fileUrl.includes('.pdf')) {
+      setCurrentPdfUrl(fileUrl);
+      setCurrentSubmissionId(submissionId); // ✅ NEW: Store submission ID
+      setPdfViewerOpen(true);
+      toast.info('Opening PDF viewer with AI checker...', {
+        position: "top-right",
+        autoClose: 2000,
+      });
+    } else {
+      // For non-PDF files (though shouldn't happen in grading), open in new tab
+      toast.info('Opening file in new tab...', {
+        position: "top-right",
+        autoClose: 2000,
+      });
+      window.open(fileUrl, '_blank');
+    }
+  };
+
+  // ✅ UPDATED: Function to close PDF viewer
+  const closePdfViewer = () => {
+    setPdfViewerOpen(false);
+    setCurrentPdfUrl('');
+    setCurrentSubmissionId(null); // ✅ NEW: Clear submission ID
+    
+    toast.info('Document viewer closed', {
+      position: "top-right",
+      autoClose: 2000,
+      hideProgressBar: true,
+    });
   };
 
   // Show error toasts for API errors
@@ -402,7 +450,7 @@ const TeacherGradingDashboard = () => {
         <main className="flex-1 ml-64 p-6 overflow-y-auto">
           <div className="mb-6">
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Submission Grading</h1>
-            <p className="text-gray-600">Review and grade student submissions</p>
+            <p className="text-gray-600">Review and grade student submissions with AI-powered analysis</p>
           </div>
 
           {/* Loading State */}
@@ -608,14 +656,7 @@ const TeacherGradingDashboard = () => {
                       <SubmissionCard
                         key={submission.id}
                         submission={submission}
-                        onViewFile={() => {
-                          window.open(submission.fileUrl, '_blank');
-                          toast.info('Opening submission file...', {
-                            position: "top-right",
-                            autoClose: 2000,
-                            hideProgressBar: true,
-                          });
-                        }}
+                        onViewFile={() => openPdfViewer(submission.fileUrl, submission.id)}
                         onGrade={() => openGradeModal(submission)}
                       />
                     ))
@@ -648,6 +689,15 @@ const TeacherGradingDashboard = () => {
         submitButtonText={gradingLoading ? "Submitting..." : "Submit Grade"}
         isLoading={gradingLoading}
       />
+
+      {/* PDF Viewer Modal with AI Checker */}
+      {pdfViewerOpen && (
+        <PDFViewerModal
+          fileUrl={currentPdfUrl}
+          submissionId={currentSubmissionId}
+          onClose={closePdfViewer}
+        />
+      )}
     </div>
   );
 };
